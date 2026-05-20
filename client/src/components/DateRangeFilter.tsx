@@ -23,6 +23,29 @@ interface Props {
   label?: string;
 }
 
+const selectStyle: React.CSSProperties = {
+  height: 32,
+  padding: '0 8px',
+  borderRadius: 8,
+  border: '1px solid #e0ddd6',
+  fontSize: 12,
+  color: '#374151',
+  background: '#fff',
+  outline: 'none',
+  cursor: 'pointer',
+};
+
+const dateInputStyle: React.CSSProperties = {
+  height: 32,
+  padding: '0 8px',
+  borderRadius: 8,
+  border: '1px solid #e0ddd6',
+  fontSize: 12,
+  color: '#374151',
+  background: '#fff',
+  outline: 'none',
+};
+
 export function DateRangeFilter({ page, defaultPreset = 'current_fq', label = 'Date Range' }: Props) {
   const pf = usePageFilters();
   const datePreset = pf.get(page, 'datePreset', defaultPreset);
@@ -30,23 +53,33 @@ export function DateRangeFilter({ page, defaultPreset = 'current_fq', label = 'D
   const dateTo     = pf.get(page, 'dateTo');
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide px-0.5">{label}</span>
-      <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-0.5">{label}</span>
+      <div className="flex items-center gap-1.5 flex-wrap">
         <select
           value={datePreset}
           onChange={e => pf.set(page, 'datePreset', e.target.value)}
-          className="h-8 px-2 rounded-md border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          style={selectStyle}
+          onFocus={e => { (e.target as HTMLElement).style.boxShadow = '0 0 0 2px rgba(251,191,36,0.4)'; }}
+          onBlur={e => { (e.target as HTMLElement).style.boxShadow = 'none'; }}
         >
           {DATE_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
         {datePreset === 'custom' && (
           <>
-            <input type="date" value={dateFrom} onChange={e => pf.set(page, 'dateFrom', e.target.value)}
-              className={`h-8 px-2 rounded-md border text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${dateFrom ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`} />
-            <span className="text-xs text-slate-400">–</span>
-            <input type="date" value={dateTo} onChange={e => pf.set(page, 'dateTo', e.target.value)}
-              className={`h-8 px-2 rounded-md border text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${dateTo ? 'border-blue-400 bg-blue-50' : 'border-slate-200'}`} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => pf.set(page, 'dateFrom', e.target.value)}
+              style={{ ...dateInputStyle, borderColor: dateFrom ? '#fbbf24' : '#e0ddd6', background: dateFrom ? '#fffbeb' : '#fff' }}
+            />
+            <span className="text-[11px]" style={{ color: '#c4bfb8' }}>–</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => pf.set(page, 'dateTo', e.target.value)}
+              style={{ ...dateInputStyle, borderColor: dateTo ? '#fbbf24' : '#e0ddd6', background: dateTo ? '#fffbeb' : '#fff' }}
+            />
           </>
         )}
       </div>
@@ -56,25 +89,18 @@ export function DateRangeFilter({ page, defaultPreset = 'current_fq', label = 'D
 
 const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
-// SF fiscal year starts Feb 1. FQ boundaries:
-//   Q1: Feb 1  – Apr 30
-//   Q2: May 1  – Jul 31
-//   Q3: Aug 1  – Oct 31
-//   Q4: Nov 1  – Jan 31
 function sfFQ(date: Date): { from: string; to: string } {
-  const m = date.getMonth(); // 0=Jan
+  const m = date.getMonth();
   const y = date.getFullYear();
   if (m >= 1 && m <= 3)  return { from: fmt(new Date(y, 1, 1)),  to: fmt(new Date(y, 3, 30)) };
   if (m >= 4 && m <= 6)  return { from: fmt(new Date(y, 4, 1)),  to: fmt(new Date(y, 6, 31)) };
   if (m >= 7 && m <= 9)  return { from: fmt(new Date(y, 7, 1)),  to: fmt(new Date(y, 9, 31)) };
-  // Q4: Nov–Jan. If current month is Jan, quarter started Nov of prior year.
   const q4start = m === 0 ? new Date(y - 1, 10, 1) : new Date(y, 10, 1);
   const q4end   = m === 0 ? new Date(y, 0, 31)     : new Date(y + 1, 0, 31);
   return { from: fmt(q4start), to: fmt(q4end) };
 }
 
 function sfFY(date: Date): { from: string; to: string } {
-  // FY starts Feb 1. If month is Jan (0), FY started the previous Feb.
   const fyStart = date.getMonth() >= 1 ? date.getFullYear() : date.getFullYear() - 1;
   return { from: fmt(new Date(fyStart, 1, 1)), to: fmt(new Date(fyStart + 1, 0, 31)) };
 }
@@ -85,7 +111,6 @@ function shiftFQ(date: Date, quarters: number): Date {
   return d;
 }
 
-/** Resolve a date preset to concrete { from, to } YYYY-MM-DD strings. */
 export function resolveDateRange(preset: string, customFrom: string, customTo: string): { from: string; to: string } {
   const today = new Date();
   if (preset === 'custom') return { from: customFrom, to: customTo };

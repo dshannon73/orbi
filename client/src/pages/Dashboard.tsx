@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, Plane, Briefcase, Building2, ChevronDown, ChevronUp, Activity, Clock } from 'lucide-react';
+import { TrendingUp, Plane, Briefcase, Building2, ChevronDown, ChevronUp, Activity, Clock, ArrowRight } from 'lucide-react';
 import { dashboardApi } from '@/api';
 import { Badge, statusVariant } from '@/components/ui/badge';
 import { fmt$, fmtDate } from '@/lib/utils';
@@ -11,26 +11,55 @@ import { useAuthStore } from '@/store/auth';
 
 const PAGE = 'dashboard';
 
-const FC_COLOR: Record<string, string> = {
-  Commit:       'bg-emerald-100 text-emerald-700',
-  'Best Case':  'bg-blue-100 text-blue-700',
-  Pipeline:     'bg-slate-100 text-slate-600',
-  Omitted:      'bg-red-100 text-red-500',
+const FC_COLOR: Record<string, { bg: string; text: string; border: string }> = {
+  Commit:      { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' },
+  'Best Case': { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+  Pipeline:    { bg: '#f8fafc', text: '#475569', border: '#e2e8f0' },
+  Omitted:     { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
 };
 
-function StatCard({ icon: Icon, label, value, sub, color }: {
-  icon: any; label: string; value: string | number; sub?: string; color: string;
+function StatCard({
+  label, value, sub, accent, loading
+}: {
+  label: string; value: string | number; sub?: string;
+  accent: 'amber' | 'blue' | 'green' | 'violet' | 'rose' | 'slate';
+  loading?: boolean;
 }) {
+  const accentColors: Record<string, string> = {
+    amber: '#f59e0b', blue: '#3b82f6', green: '#10b981',
+    violet: '#8b5cf6', rose: '#f43f5e', slate: '#64748b',
+  };
+  const color = accentColors[accent];
+
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
-        <Icon size={18} className="text-white" />
-      </div>
-      <div className="min-w-0">
-        <div className="text-2xl font-bold text-slate-900 truncate">{value}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{label}</div>
-        {sub && <div className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</div>}
-      </div>
+    <div
+      className={`stat-card stat-card-${accent} bg-white rounded-2xl px-5 py-4 relative`}
+      style={{
+        border: '1px solid #e8e5de',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      }}
+    >
+      {loading ? (
+        <div className="space-y-2 pt-1">
+          <div className="h-7 w-20 rounded shimmer" />
+          <div className="h-3 w-28 rounded shimmer" />
+        </div>
+      ) : (
+        <>
+          <div
+            className="text-[28px] font-medium leading-none tabular"
+            style={{ color: '#0f0e1a', letterSpacing: '-0.02em' }}
+          >
+            {value}
+          </div>
+          <div className="text-[12px] text-slate-500 mt-1.5 font-medium">{label}</div>
+          {sub && (
+            <div className="text-[11px] mt-0.5 truncate" style={{ color: color, opacity: 0.8 }}>
+              {sub}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -41,58 +70,108 @@ function AccountOppRow({ account }: { account: any }) {
   const totalDCSplit = account.opps.reduce((s: number, o: any) => s + (o.dcSplitAmount ?? 0), 0);
 
   return (
-    <div className={`border rounded-2xl bg-white shadow-sm overflow-hidden transition-colors ${expanded ? 'border-blue-200' : 'border-slate-200'}`}>
+    <div
+      className="rounded-xl overflow-hidden transition-all duration-150"
+      style={{
+        border: expanded ? '1px solid #fde68a' : '1px solid #e8e5de',
+        background: '#fff',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+      }}
+    >
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-[#fafaf7]"
         onClick={() => setExpanded(v => !v)}
       >
-        <Building2 size={15} className="text-slate-400 shrink-0" />
+        <Building2 size={14} className="text-slate-300 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-slate-800 truncate">{account.accountName}</div>
-          <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 flex-wrap">
+          <div className="text-[13px] font-semibold text-slate-800 truncate">{account.accountName}</div>
+          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-400 flex-wrap">
             <span>{account.opps.length} opp{account.opps.length !== 1 ? 's' : ''}</span>
-            {totalAmt > 0 && <span className="font-medium text-slate-600">{fmt$(totalAmt)} open</span>}
-            {totalDCSplit > 0 && <span className="text-amber-600 font-medium">{fmt$(totalDCSplit)} my DC split</span>}
+            {totalAmt > 0 && (
+              <span className="tabular font-medium text-slate-600">{fmt$(totalAmt)}</span>
+            )}
+            {totalDCSplit > 0 && (
+              <span className="tabular font-medium" style={{ color: '#d97706' }}>{fmt$(totalDCSplit)} my split</span>
+            )}
           </div>
         </div>
-        {expanded ? <ChevronUp size={14} className="text-slate-400 shrink-0" /> : <ChevronDown size={14} className="text-slate-400 shrink-0" />}
+        {expanded
+          ? <ChevronUp size={13} className="text-slate-300 shrink-0" />
+          : <ChevronDown size={13} className="text-slate-300 shrink-0" />
+        }
       </div>
 
       {expanded && (
-        <div className="border-t border-slate-100 divide-y divide-slate-50">
-          {account.opps.map((o: any) => (
-            <div key={o.oppId} className="px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-medium text-slate-800 flex-1 min-w-0 truncate">{o.oppName}</span>
-                {o.amount > 0 && <span className="text-xs text-slate-600 font-medium shrink-0">{fmt$(o.amount)}</span>}
+        <div style={{ borderTop: '1px solid #f4f1ea' }}>
+          {account.opps.map((o: any) => {
+            const fc = FC_COLOR[o.forecastCategory] ?? FC_COLOR.Pipeline;
+            return (
+              <div key={o.oppId} className="px-4 py-3" style={{ borderTop: '1px solid #f8f6f0' }}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[13px] font-medium text-slate-800 flex-1 min-w-0 truncate">{o.oppName}</span>
+                  {o.amount > 0 && (
+                    <span className="tabular text-[12px] text-slate-600 font-medium shrink-0">{fmt$(o.amount)}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {o.forecastCategory && (
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                      style={{ background: fc.bg, color: fc.text, border: `1px solid ${fc.border}` }}
+                    >
+                      {o.forecastCategory}
+                    </span>
+                  )}
+                  {o.stage && <span className="text-[11px] text-slate-400">{o.stage}</span>}
+                  <span className="text-[11px] text-slate-400 tabular">Close {fmtDate(o.closeDate)}</span>
+                  {o.dcSplitPct != null && (
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                      style={{ background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}
+                    >
+                      {o.dcSplitPct}% split
+                    </span>
+                  )}
+                  {o.dcSplitAmount != null && o.dcSplitAmount > 0 && (
+                    <span className="tabular text-[11px] font-medium" style={{ color: '#d97706' }}>
+                      {fmt$(o.dcSplitAmount)}
+                    </span>
+                  )}
+                  {o.activityCount > 0 && (
+                    <span className="text-[11px] text-slate-400 flex items-center gap-0.5">
+                      <Activity size={9} className="shrink-0" />
+                      {o.activityCount}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {o.forecastCategory && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${FC_COLOR[o.forecastCategory] ?? 'bg-slate-100 text-slate-600'}`}>
-                    {o.forecastCategory}
-                  </span>
-                )}
-                {o.stage && <span className="text-[10px] text-slate-500">{o.stage}</span>}
-                <span className="text-[10px] text-slate-400">Close {fmtDate(o.closeDate)}</span>
-                {o.dcSplitPct != null && (
-                  <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium border border-amber-100">
-                    {o.dcSplitPct}% DC split
-                  </span>
-                )}
-                {o.dcSplitAmount != null && o.dcSplitAmount > 0 && (
-                  <span className="text-[10px] text-amber-600 font-medium">{fmt$(o.dcSplitAmount)}</span>
-                )}
-                {o.activityCount > 0 && (
-                  <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                    <Activity size={9} className="shrink-0" />
-                    {o.activityCount} logged
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+    </div>
+  );
+}
+
+function SectionCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{ background: '#fff', border: '1px solid #e8e5de', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+    >
+      <div
+        className="flex items-center justify-between px-5 py-3.5"
+        style={{ borderBottom: '1px solid #f0ede7' }}
+      >
+        <h2
+          className="text-[13px] font-semibold text-slate-700"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          {title}
+        </h2>
+        {action}
+      </div>
+      {children}
     </div>
   );
 }
@@ -102,12 +181,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const pf = usePageFilters();
-  const datePreset    = pf.get(PAGE, 'datePreset', 'current_fq');
-  const customFrom    = pf.get(PAGE, 'dateFrom');
-  const customTo      = pf.get(PAGE, 'dateTo');
-  const ownerName     = pf.get(PAGE, 'ownerName');
-  const ownerRole     = pf.get(PAGE, 'ownerRole');
-  const justMyData    = pf.get(PAGE, 'justMyData');
+  const datePreset = pf.get(PAGE, 'datePreset', 'current_fq');
+  const customFrom = pf.get(PAGE, 'dateFrom');
+  const customTo   = pf.get(PAGE, 'dateTo');
+  const ownerName  = pf.get(PAGE, 'ownerName');
+  const ownerRole  = pf.get(PAGE, 'ownerRole');
+  const justMyData = pf.get(PAGE, 'justMyData');
 
   const { from, to } = resolveDateRange(datePreset, customFrom, customTo);
 
@@ -132,123 +211,171 @@ export default function Dashboard() {
   const travelApprovals: any[] = d?.travelApprovals ?? [];
   const accountOpps: any[] = d?.accountOpps ?? [];
 
+  const inputClass = "h-8 px-3 rounded-lg border text-[12px] text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-slate-300 transition-shadow"
+  const inputStyle = { borderColor: '#e0ddd6' };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Page title */}
       <div>
-        <h1 className="text-xl font-semibold text-slate-900 mb-4">Dashboard</h1>
+        <h1
+          className="text-[22px] font-bold text-slate-900 mb-1"
+          style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+        >
+          Dashboard
+        </h1>
+        <p className="text-[13px] text-slate-400">Your SE performance at a glance</p>
+      </div>
 
-        {/* Filter bar */}
-        <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-sm flex flex-wrap items-end gap-4">
-          <DateRangeFilter page={PAGE} defaultPreset="current_fq" label="Period" />
+      {/* Filter bar */}
+      <div
+        className="rounded-2xl px-5 py-4 flex flex-wrap items-end gap-4"
+        style={{ background: '#fff', border: '1px solid #e8e5de', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+      >
+        <DateRangeFilter page={PAGE} defaultPreset="current_fq" label="Period" />
 
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Owner Name</span>
-            <input
-              type="text"
-              value={ownerName}
-              onChange={e => pf.set(PAGE, 'ownerName', e.target.value)}
-              placeholder="e.g. Shannon"
-              className="h-8 px-2 rounded-md border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-300 w-36"
-            />
-          </div>
-
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Role Filter</span>
-            <input
-              type="text"
-              value={ownerRole}
-              onChange={e => pf.set(PAGE, 'ownerRole', e.target.value)}
-              placeholder="e.g. PACE, AMER AE"
-              className="h-8 px-2 rounded-md border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-300 w-44"
-            />
-          </div>
-
-          <label className="flex items-center gap-2 cursor-pointer pb-1">
-            <input
-              type="checkbox"
-              checked={justMyData === 'true'}
-              onChange={e => pf.set(PAGE, 'justMyData', e.target.checked ? 'true' : '')}
-              className="rounded"
-            />
-            <span className="text-xs text-slate-600 font-medium">Just my data</span>
-          </label>
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Owner Name</span>
+          <input
+            type="text"
+            value={ownerName}
+            onChange={e => pf.set(PAGE, 'ownerName', e.target.value)}
+            placeholder="e.g. Shannon"
+            className={inputClass}
+            style={{ ...inputStyle, width: 140 }}
+          />
         </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Role Filter</span>
+          <input
+            type="text"
+            value={ownerRole}
+            onChange={e => pf.set(PAGE, 'ownerRole', e.target.value)}
+            placeholder="e.g. PACE, AMER AE"
+            className={inputClass}
+            style={{ ...inputStyle, width: 172 }}
+          />
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer pb-0.5">
+          <input
+            type="checkbox"
+            checked={justMyData === 'true'}
+            onChange={e => pf.set(PAGE, 'justMyData', e.target.checked ? 'true' : '')}
+            className="rounded accent-amber-500 w-3.5 h-3.5"
+          />
+          <span className="text-[12px] text-slate-600 font-medium">Just my data</span>
+        </label>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
-          icon={Clock}
           label="Customer Hours"
           value={isLoading ? '—' : `${stats.customerHours ?? '—'}h`}
-          sub="events logged to accounts/opps"
-          color="bg-blue-500"
+          sub="logged to accounts"
+          accent="blue"
+          loading={isLoading}
         />
         <StatCard
-          icon={Briefcase}
           label="Open DC Opps"
           value={isLoading ? '—' : (stats.dcCount ?? '—')}
           sub={stats.totalSplitAmount > 0 ? `${fmt$(stats.totalSplitAmount)} my split` : undefined}
-          color="bg-amber-500"
+          accent="amber"
+          loading={isLoading}
         />
         <StatCard
-          icon={TrendingUp}
           label="Total Opp Amount"
           value={isLoading ? '—' : fmt$(stats.totalOppAmount)}
           sub="open opps w/ my DC"
-          color="bg-slate-500"
+          accent="slate"
+          loading={isLoading}
         />
         <StatCard
-          icon={Briefcase}
           label="DC Split Amount"
           value={isLoading ? '—' : fmt$(stats.totalSplitAmount)}
-          sub="my split across open opps"
-          color="bg-emerald-500"
+          sub="my split across opps"
+          accent="green"
+          loading={isLoading}
         />
         <StatCard
-          icon={Plane}
           label="Travel Approvals"
           value={isLoading ? '—' : (stats.travelCount ?? '—')}
-          color="bg-violet-500"
+          accent="violet"
+          loading={isLoading}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Travel Approvals */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">Travel Approvals</h2>
-            <button onClick={() => navigate('/travel-approvals')} className="text-xs text-blue-600 hover:underline">View all →</button>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {isLoading && <p className="px-5 py-8 text-sm text-slate-400 text-center">Loading…</p>}
+      {/* Bottom two panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Travel */}
+        <SectionCard
+          title="Travel Approvals"
+          action={
+            <button
+              onClick={() => navigate('/travel-approvals')}
+              className="flex items-center gap-1 text-[11px] font-medium transition-colors hover:opacity-70"
+              style={{ color: '#d97706' }}
+            >
+              View all <ArrowRight size={11} />
+            </button>
+          }
+        >
+          <div>
+            {isLoading && (
+              <div className="px-5 py-8 space-y-2">
+                {[1,2,3].map(i => <div key={i} className="h-8 rounded shimmer" />)}
+              </div>
+            )}
             {!isLoading && travelApprovals.length === 0 && (
-              <p className="px-5 py-8 text-sm text-slate-400 text-center">No travel approvals</p>
+              <p className="px-5 py-8 text-[13px] text-slate-400 text-center">No travel approvals</p>
             )}
             {travelApprovals.map((t: any) => (
-              <div key={t.Id} className="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+              <div
+                key={t.Id}
+                className="px-5 py-3 flex items-center gap-3 transition-colors hover:bg-[#fafaf7]"
+                style={{ borderBottom: '1px solid #f5f2ec' }}
+              >
                 <Badge variant={statusVariant(t.Approval_Status__c)}>{t.Approval_Status__c ?? '—'}</Badge>
-                <span className="flex-1 text-sm font-medium text-slate-800 truncate">{t.Name}</span>
-                <span className="text-xs text-slate-400 shrink-0">{fmtDate(t.Travel_Start_Date__c)}</span>
+                <span className="flex-1 text-[13px] font-medium text-slate-800 truncate">{t.Name}</span>
+                <span className="text-[11px] text-slate-400 tabular shrink-0">{fmtDate(t.Travel_Start_Date__c)}</span>
                 {t.Total_Cost__c != null && (
-                  <span className="text-sm text-slate-500 shrink-0">{fmt$(t.Total_Cost__c)}</span>
+                  <span className="text-[12px] tabular text-slate-600 font-medium shrink-0">{fmt$(t.Total_Cost__c)}</span>
                 )}
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        {/* DC Opportunities summary */}
-        <div className="space-y-2">
+        {/* DC Opportunities */}
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">Accounts & Opportunities with My DC</h2>
-            <button onClick={() => navigate('/deal-contributions')} className="text-xs text-blue-600 hover:underline">View all →</button>
+            <h2
+              className="text-[13px] font-semibold text-slate-700"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              Accounts & Opportunities with My DC
+            </h2>
+            <button
+              onClick={() => navigate('/deal-contributions')}
+              className="flex items-center gap-1 text-[11px] font-medium transition-colors hover:opacity-70"
+              style={{ color: '#d97706' }}
+            >
+              View all <ArrowRight size={11} />
+            </button>
           </div>
+
           {isLoading && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-8 text-sm text-slate-400 text-center">Loading…</div>
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl shimmer" />)}
+            </div>
           )}
           {!isLoading && accountOpps.length === 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-8 text-sm text-slate-400 text-center">
+            <div
+              className="rounded-2xl px-5 py-8 text-[13px] text-slate-400 text-center"
+              style={{ background: '#fff', border: '1px solid #e8e5de' }}
+            >
               No open opportunities with your DC
             </div>
           )}

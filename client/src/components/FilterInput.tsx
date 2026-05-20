@@ -10,17 +10,18 @@ interface FilterInputProps {
   label?: string;
 }
 
-/**
- * Text filter with per-term negation using - prefix.
- * e.g. "-Block, Emerson" excludes Block and includes Emerson.
- * Values are passed as-is to the server; server parses - prefix per term.
- */
 export function FilterInput({ value, onChange, placeholder, title, className, label }: FilterInputProps) {
   const active = !!value;
 
+  const baseStyle: React.CSSProperties = active
+    ? { borderColor: '#fbbf24', background: '#fffbeb' }
+    : { borderColor: '#e0ddd6', background: '#fff' };
+
   return (
     <div className="flex flex-col gap-0.5">
-      {label && <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide px-0.5">{label}</span>}
+      {label && (
+        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest px-0.5">{label}</span>
+      )}
       <div className="relative flex items-center">
         <input
           type="text"
@@ -29,18 +30,19 @@ export function FilterInput({ value, onChange, placeholder, title, className, la
           placeholder={placeholder}
           title={title}
           className={cn(
-            'h-8 pl-2.5 rounded-md border text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-6 transition-colors',
-            active ? 'border-blue-400 bg-blue-50' : 'border-slate-200',
+            'h-8 pl-2.5 rounded-lg border text-[12px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-300 pr-6 transition-all',
             className
           )}
+          style={baseStyle}
         />
         {active && (
           <button
             type="button"
             onClick={() => onChange('')}
-            className="absolute right-1.5 text-slate-400 hover:text-slate-700 cursor-pointer p-0.5 rounded"
+            className="absolute right-1.5 cursor-pointer p-0.5 rounded transition-opacity hover:opacity-60"
+            style={{ color: '#d97706' }}
           >
-            <X size={11} />
+            <X size={10} />
           </button>
         )}
       </div>

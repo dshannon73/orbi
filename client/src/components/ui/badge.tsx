@@ -3,12 +3,12 @@ import { cn } from '@/lib/utils';
 type Variant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 const variants: Record<Variant, string> = {
-  default: 'bg-blue-100 text-blue-800',
-  success: 'bg-emerald-100 text-emerald-800',
-  warning: 'bg-amber-100 text-amber-800',
-  danger: 'bg-red-100 text-red-800',
-  info: 'bg-sky-100 text-sky-800',
-  neutral: 'bg-slate-100 text-slate-700',
+  default: 'bg-amber-50 text-amber-700 border border-amber-100',
+  success: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+  warning: 'bg-amber-50 text-amber-600 border border-amber-100',
+  danger:  'bg-red-50 text-red-600 border border-red-100',
+  info:    'bg-sky-50 text-sky-700 border border-sky-100',
+  neutral: 'bg-slate-100 text-slate-600 border border-slate-200',
 };
 
 export function statusVariant(s: string | null | undefined): Variant {
@@ -23,7 +23,11 @@ export function statusVariant(s: string | null | undefined): Variant {
 
 export function Badge({ children, variant = 'default', className }: { children: React.ReactNode; variant?: Variant; className?: string }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', variants[variant], className)}>
+    <span className={cn(
+      'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium whitespace-nowrap leading-none',
+      variants[variant],
+      className
+    )}>
       {children}
     </span>
   );

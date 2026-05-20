@@ -1,8 +1,7 @@
-import { Filter, User, Search } from 'lucide-react';
+import { Filter, User, Search, X } from 'lucide-react';
 import { useFilters } from '@/store/filters';
 import { useAuthStore } from '@/store/auth';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { FilterInput } from '@/components/FilterInput';
 import { cn } from '@/lib/utils';
 
@@ -26,19 +25,20 @@ export function GlobalFilterBar({
     setJustMyData, setOwnerRolePattern, setOwnerName,
   } = useFilters();
   const currentUserName = useAuthStore(s => s.user?.name);
-
   const activeFilters = [justMyData, ownerName, ownerRolePattern].filter(Boolean).length;
 
   return (
-    <div className="mb-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div
+      className="mb-4 rounded-xl overflow-hidden"
+      style={{ background: '#fff', border: '1px solid #e8e5de', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+    >
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-
-        {/* Left: search + per-page controls */}
+        {/* Search */}
         {onSearchChange && (
           <div className="relative min-w-[180px] w-48">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#c4bfb8' }} />
             <Input
-              className="pl-8 h-8 text-sm"
+              className="pl-8 h-8 text-[12px]"
               value={search}
               onChange={e => onSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
@@ -49,12 +49,10 @@ export function GlobalFilterBar({
         {statusSlot}
         {extra}
 
-        {/* Right: global owner filters */}
+        {/* Right: owner filters */}
         <div className="flex items-center gap-2 ml-auto flex-wrap">
-
-          {/* Owner name filter with ≠ */}
           <div className="flex items-center gap-1">
-            <User size={12} className="text-slate-400 shrink-0" />
+            <User size={11} style={{ color: '#c4bfb8' }} className="shrink-0" />
             <FilterInput
               value={ownerName}
               onChange={setOwnerName}
@@ -64,9 +62,8 @@ export function GlobalFilterBar({
             />
           </div>
 
-          {/* Role pattern filter with ≠ */}
           <div className="flex items-center gap-1">
-            <Filter size={12} className="text-slate-400 shrink-0" />
+            <Filter size={11} style={{ color: '#c4bfb8' }} className="shrink-0" />
             <FilterInput
               value={ownerRolePattern}
               onChange={setOwnerRolePattern}
@@ -76,26 +73,37 @@ export function GlobalFilterBar({
             />
           </div>
 
-          {/* Just my data toggle */}
-          <Button
-            variant={justMyData ? 'primary' : 'secondary'}
-            size="sm"
+          {/* My data toggle */}
+          <button
             onClick={() => setJustMyData(!justMyData)}
-            className={cn('h-8 gap-1.5 shrink-0 text-xs', justMyData && 'ring-2 ring-blue-300')}
+            className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[12px] font-semibold transition-all cursor-pointer"
+            style={justMyData
+              ? {
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                  color: '#0e0d1a',
+                  boxShadow: '0 2px 6px rgba(245,158,11,0.25)',
+                }
+              : {
+                  background: '#f5f4f0',
+                  color: '#8b8577',
+                  border: '1px solid #e8e5de',
+                }
+            }
             title={currentUserName ? `Filter to ${currentUserName}'s records` : 'Filter to your records'}
           >
-            <User size={12} />
+            <User size={11} />
             {justMyData ? 'My Data' : 'All Data'}
-          </Button>
+          </button>
 
-          {/* Clear all */}
           {activeFilters > 0 && (
             <button
               onClick={() => { setJustMyData(false); setOwnerName(''); setOwnerRolePattern(''); }}
-              className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+              className="text-[11px] flex items-center gap-1 cursor-pointer transition-opacity hover:opacity-60"
+              style={{ color: '#b5b0a8' }}
               title="Clear all owner filters"
             >
-              Clear filters
+              <X size={10} />
+              Clear
             </button>
           )}
         </div>
@@ -103,23 +111,26 @@ export function GlobalFilterBar({
 
       {/* Active filter chips */}
       {activeFilters > 0 && (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/60 border-t border-blue-100">
-          <span className="text-xs text-blue-500 font-medium mr-1">Active:</span>
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5"
+          style={{ background: '#fffbeb', borderTop: '1px solid #fde68a' }}
+        >
+          <span className="text-[10px] font-semibold mr-1" style={{ color: '#d97706' }}>Active:</span>
           {justMyData && currentUserName && (
-            <Chip label={`My data (${currentUserName})`} onRemove={() => setJustMyData(false)} />
+            <Chip label={`My data — ${currentUserName}`} onRemove={() => setJustMyData(false)} />
           )}
           {ownerName && (
             <Chip
-              label={`Owner ${ownerName.startsWith('!') ? '≠' : '='} ${ownerName.startsWith('!') ? ownerName.slice(1) : ownerName}`}
+              label={`Owner ${ownerName.startsWith('!') ? '≠' : '='} ${ownerName.replace(/^!/, '')}`}
               onRemove={() => setOwnerName('')}
-              variant={ownerName.startsWith('!') ? 'red' : 'blue'}
+              variant={ownerName.startsWith('!') ? 'red' : 'amber'}
             />
           )}
           {ownerRolePattern && (
             <Chip
-              label={`Role ${ownerRolePattern.startsWith('!') ? '≠' : '='} ${ownerRolePattern.startsWith('!') ? ownerRolePattern.slice(1) : ownerRolePattern}`}
+              label={`Role ${ownerRolePattern.startsWith('!') ? '≠' : '='} ${ownerRolePattern.replace(/^!/, '')}`}
               onRemove={() => setOwnerRolePattern('')}
-              variant={ownerRolePattern.startsWith('!') ? 'red' : 'blue'}
+              variant={ownerRolePattern.startsWith('!') ? 'red' : 'amber'}
             />
           )}
         </div>
@@ -128,14 +139,17 @@ export function GlobalFilterBar({
   );
 }
 
-function Chip({ label, onRemove, variant = 'blue' }: { label: string; onRemove: () => void; variant?: 'blue' | 'red' }) {
+function Chip({ label, onRemove, variant = 'amber' }: { label: string; onRemove: () => void; variant?: 'amber' | 'red' }) {
   return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-      variant === 'red' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-    )}>
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium"
+      style={variant === 'red'
+        ? { background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }
+        : { background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a' }
+      }
+    >
       {label}
-      <button onClick={onRemove} className="hover:opacity-75 cursor-pointer">✕</button>
+      <button onClick={onRemove} className="hover:opacity-70 cursor-pointer leading-none">✕</button>
     </span>
   );
 }

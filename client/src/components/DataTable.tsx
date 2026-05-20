@@ -21,16 +21,13 @@ interface DataTableProps<TData extends { Id?: string }> {
   isLoading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: TData) => void;
-  /** Called with selected rows whenever selection changes */
   onSelectionChange?: (rows: TData[]) => void;
-  /** Renders inside the selection toolbar when rows are selected */
   selectionActions?: (rows: TData[], clearSelection: () => void) => React.ReactNode;
   columnVisibility?: VisibilityState;
   onColumnVisibilityChange?: (updater: VisibilityState | ((prev: VisibilityState) => VisibilityState)) => void;
 }
 
 const RESIZE_MODE: ColumnResizeMode = 'onChange';
-
 const CHECKBOX_COL_ID = '__select__';
 
 export function DataTable<TData extends { Id?: string }>({
@@ -52,37 +49,36 @@ export function DataTable<TData extends { Id?: string }>({
 
   const checkboxColumn: ColumnDef<TData, any> = {
     id: CHECKBOX_COL_ID,
-    size: 40,
-    minSize: 40,
-    maxSize: 40,
-    enableSorting: false,
-    enableResizing: false,
+    size: 40, minSize: 40, maxSize: 40,
+    enableSorting: false, enableResizing: false,
     header: ({ table }) => {
       const allSelected = table.getIsAllRowsSelected();
       const someSelected = table.getIsSomeRowsSelected();
       return (
         <button
-          className="flex items-center justify-center w-full cursor-pointer text-slate-400 hover:text-slate-700"
+          className="flex items-center justify-center w-full cursor-pointer"
+          style={{ color: allSelected ? '#f59e0b' : '#c4bfb8' }}
           onClick={table.getToggleAllRowsSelectedHandler()}
           title={allSelected ? 'Deselect all' : 'Select all'}
         >
           {allSelected
-            ? <CheckSquare size={15} className="text-blue-600" />
+            ? <CheckSquare size={14} />
             : someSelected
-              ? <MinusSquare size={15} className="text-blue-400" />
-              : <Square size={15} />}
+              ? <MinusSquare size={14} style={{ color: '#f59e0b' }} />
+              : <Square size={14} />}
         </button>
       );
     },
     cell: ({ row }) => (
       <button
-        className="flex items-center justify-center w-full cursor-pointer text-slate-300 hover:text-slate-600"
+        className="flex items-center justify-center w-full cursor-pointer transition-colors"
+        style={{ color: row.getIsSelected() ? '#f59e0b' : '#d4cfc7' }}
         onClick={(e) => { e.stopPropagation(); row.toggleSelected(); }}
         title={row.getIsSelected() ? 'Deselect row' : 'Select row'}
       >
         {row.getIsSelected()
-          ? <CheckSquare size={14} className="text-blue-600" />
-          : <Square size={14} />}
+          ? <CheckSquare size={13} />
+          : <Square size={13} />}
       </button>
     ),
   };
@@ -94,9 +90,7 @@ export function DataTable<TData extends { Id?: string }>({
     columns: allColumns,
     columnResizeMode: RESIZE_MODE,
     state: {
-      sorting,
-      columnFilters,
-      rowSelection,
+      sorting, columnFilters, rowSelection,
       ...(columnVisibility !== undefined ? { columnVisibility } : {}),
     },
     onSortingChange: setSorting,
@@ -110,17 +104,14 @@ export function DataTable<TData extends { Id?: string }>({
     defaultColumn: { minSize: 60, size: 150 },
   });
 
-  // Notify parent of selection changes
   useEffect(() => {
     if (!onSelectionChange) return;
     const selected = table.getSelectedRowModel().rows.map(r => r.original);
     onSelectionChange(selected);
   }, [rowSelection]);
 
-  // Auto-size columns once after first data load
   useEffect(() => {
     if (!tableRef.current || !data.length || autoSized.current) return;
-    // defer one frame so cells are rendered
     const id = requestAnimationFrame(() => {
       if (!tableRef.current) return;
       const headers = tableRef.current.querySelectorAll('th[data-col-id]');
@@ -139,7 +130,6 @@ export function DataTable<TData extends { Id?: string }>({
     return () => cancelAnimationFrame(id);
   }, [data]);
 
-  // Reset autoSize flag when data identity changes (new query)
   useEffect(() => { autoSized.current = false; }, [data]);
 
   const clearSelection = useCallback(() => setRowSelection({}), []);
@@ -151,17 +141,23 @@ export function DataTable<TData extends { Id?: string }>({
     <div className="space-y-0">
       {/* Selection toolbar */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-3 px-3 py-2 bg-blue-600 text-white rounded-t-xl text-sm font-medium">
+        <div
+          className="flex items-center gap-3 px-4 py-2 rounded-t-xl text-[12px] font-semibold"
+          style={{
+            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            color: '#0e0d1a',
+          }}
+        >
           <span>{selectedCount} row{selectedCount !== 1 ? 's' : ''} selected</span>
           <button
             onClick={() => table.toggleAllRowsSelected(true)}
-            className="text-blue-200 hover:text-white underline text-xs cursor-pointer"
+            className="opacity-70 hover:opacity-100 underline cursor-pointer text-[11px]"
           >
             Select all {data.length}
           </button>
           <button
             onClick={clearSelection}
-            className="text-blue-200 hover:text-white underline text-xs cursor-pointer"
+            className="opacity-70 hover:opacity-100 underline cursor-pointer text-[11px]"
           >
             Deselect all
           </button>
@@ -177,14 +173,15 @@ export function DataTable<TData extends { Id?: string }>({
       <div
         ref={tableRef}
         className={cn(
-          'w-full overflow-x-auto bg-white border border-slate-200 shadow-sm',
+          'w-full overflow-x-auto',
           selectedCount > 0 ? 'rounded-b-xl' : 'rounded-xl'
         )}
+        style={{ background: '#fff', border: '1px solid #e8e5de', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
       >
         <table style={{ width: totalWidth, minWidth: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
           <thead>
             {table.getHeaderGroups().map(hg => (
-              <tr key={hg.id} className="bg-slate-50 border-b border-slate-200">
+              <tr key={hg.id} style={{ background: '#f8f6f1', borderBottom: '1px solid #ece9e1' }}>
                 {hg.headers.map(header => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
@@ -195,21 +192,30 @@ export function DataTable<TData extends { Id?: string }>({
                       data-col-id={header.column.id}
                       style={{ width: header.getSize(), position: 'relative' }}
                       className={cn(
-                        'px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide select-none',
+                        'px-3 py-2.5 text-left select-none',
                         isCheckbox && 'px-2',
-                        canSort && !isCheckbox && 'cursor-pointer hover:text-slate-700'
+                        canSort && !isCheckbox && 'cursor-pointer',
                       )}
-                      onClick={canSort && !isCheckbox ? header.column.getToggleSortingHandler() : undefined}
                     >
-                      <div className="flex items-center gap-1">
+                      <div
+                        className="flex items-center gap-1"
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: '#8b8577',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.07em',
+                        }}
+                        onClick={canSort && !isCheckbox ? header.column.getToggleSortingHandler() : undefined}
+                      >
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {canSort && !isCheckbox && (
-                          <span className="text-slate-300 ml-auto shrink-0">
+                          <span className="ml-auto shrink-0 opacity-40">
                             {sorted === 'asc'
-                              ? <ChevronUp size={12} />
+                              ? <ChevronUp size={11} />
                               : sorted === 'desc'
-                                ? <ChevronDown size={12} />
-                                : <ChevronsUpDown size={12} />}
+                                ? <ChevronDown size={11} />
+                                : <ChevronsUpDown size={11} />}
                           </span>
                         )}
                       </div>
@@ -230,16 +236,19 @@ export function DataTable<TData extends { Id?: string }>({
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={allColumns.length} className="px-3 py-12 text-center">
-                  <div className="flex items-center justify-center gap-2 text-slate-400 text-sm">
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <td colSpan={allColumns.length} className="px-3 py-10 text-center">
+                  <div className="flex items-center justify-center gap-2 text-[13px]" style={{ color: '#b5b0a8' }}>
+                    <div
+                      className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                      style={{ borderColor: '#f59e0b', borderTopColor: 'transparent' }}
+                    />
                     Loading…
                   </div>
                 </td>
               </tr>
             ) : table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td colSpan={allColumns.length} className="px-3 py-12 text-center text-sm text-slate-400">
+                <td colSpan={allColumns.length} className="px-3 py-10 text-center text-[13px]" style={{ color: '#b5b0a8' }}>
                   {emptyMessage}
                 </td>
               </tr>
@@ -248,10 +257,19 @@ export function DataTable<TData extends { Id?: string }>({
                 <tr
                   key={row.id}
                   className={cn(
-                    'border-b border-slate-100 last:border-0 transition-colors',
-                    row.getIsSelected() && 'bg-blue-50',
-                    !row.getIsSelected() && onRowClick && 'cursor-pointer hover:bg-slate-50/80',
+                    'transition-colors',
+                    !row.getIsSelected() && onRowClick && 'cursor-pointer',
                   )}
+                  style={{
+                    borderBottom: '1px solid #f0ede7',
+                    background: row.getIsSelected() ? '#fffbeb' : undefined,
+                  }}
+                  onMouseEnter={e => {
+                    if (!row.getIsSelected()) (e.currentTarget as HTMLElement).style.background = '#fafaf7';
+                  }}
+                  onMouseLeave={e => {
+                    if (!row.getIsSelected()) (e.currentTarget as HTMLElement).style.background = '';
+                  }}
                   onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map(cell => (
@@ -260,7 +278,7 @@ export function DataTable<TData extends { Id?: string }>({
                       data-col-id={cell.column.id}
                       style={{ width: cell.column.getSize() }}
                       className={cn(
-                        'py-2.5 text-sm text-slate-800 truncate',
+                        'py-2.5 text-[13px] text-slate-800 truncate',
                         cell.column.id === CHECKBOX_COL_ID ? 'px-2' : 'px-3'
                       )}
                     >
