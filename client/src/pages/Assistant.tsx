@@ -170,6 +170,159 @@ function OppPicker({ opps, selectedOppId, accountId, accountName, parentAccountI
 
 interface ExecResult { type: string; name: string; action: string }
 
+// ── Agent loading screen ──────────────────────────────────────────────────────
+
+const AGENT_STEPS: { step: string; label: string; icon: string }[] = [
+  { step: 'calendar',  label: 'Reading Google Calendar',         icon: '📅' },
+  { step: 'attendees', label: 'Resolving attendees in Salesforce', icon: '👥' },
+  { step: 'activities',label: 'Fetching logged SF activities',    icon: '📋' },
+  { step: 'opps',      label: 'Querying accounts & opps',         icon: '🏢' },
+  { step: 'dcs',       label: 'Fetching Deal Contributions',      icon: '💼' },
+  { step: 'matching',  label: 'Matching events to accounts',      icon: '🔗' },
+  { step: 'llm',       label: 'AI classifying & matching',        icon: '✦' },
+  { step: 'grouping',  label: 'Building briefing',                icon: '⚡' },
+];
+
+function AgentLoadingScreen({ progressLog }: { progressLog: { step: string; message: string; debug?: boolean }[] }) {
+  const completedSteps = new Set(
+    progressLog.filter(p => !p.debug).map(p => p.step)
+  );
+  const lastLog = progressLog.filter(p => !p.debug).at(-1);
+  const activeStep = lastLog?.step ?? '';
+  const activeStepIndex = AGENT_STEPS.findIndex(s => s.step === activeStep);
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: 'linear-gradient(160deg, #0e0d1a 0%, #161428 50%, #0e0d1a 100%)',
+        border: '1px solid rgba(245,158,11,0.15)',
+        boxShadow: '0 4px 40px rgba(0,0,0,0.15)',
+      }}
+    >
+      {/* Header */}
+      <div className="px-6 pt-6 pb-4 flex items-center gap-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        {/* Pulsing orb */}
+        <div className="relative shrink-0">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              boxShadow: '0 0 20px rgba(245,158,11,0.4)',
+            }}
+          >
+            <span style={{ fontSize: 16, fontFamily: 'var(--font-display)', color: '#0e0d1a', fontWeight: 800 }}>O</span>
+          </div>
+          {/* Outer ring pulse */}
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              border: '2px solid rgba(245,158,11,0.3)',
+              animation: 'orbit 3s linear infinite',
+              scale: '1.4',
+            }}
+          />
+        </div>
+        <div>
+          <p className="text-white font-semibold text-[15px]" style={{ fontFamily: 'var(--font-display)' }}>
+            Orbi Agent running
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: '#5c5a78' }}>
+            {lastLog?.message ?? 'Initializing…'}
+          </p>
+        </div>
+        {/* Animated dots */}
+        <div className="ml-auto flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background: '#f59e0b',
+                animation: `pulse-dot 1.4s ease-in-out ${i * 0.2}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Steps grid */}
+      <div className="px-6 py-5 grid grid-cols-4 gap-3">
+        {AGENT_STEPS.map((s, i) => {
+          const done    = completedSteps.has(s.step);
+          const active  = s.step === activeStep;
+          const pending = !done && !active;
+
+          return (
+            <div
+              key={s.step}
+              className="rounded-xl px-3 py-2.5 flex flex-col gap-1.5 transition-all duration-300"
+              style={{
+                background: done
+                  ? 'rgba(16,185,129,0.08)'
+                  : active
+                  ? 'rgba(245,158,11,0.1)'
+                  : 'rgba(255,255,255,0.02)',
+                border: done
+                  ? '1px solid rgba(16,185,129,0.2)'
+                  : active
+                  ? '1px solid rgba(245,158,11,0.25)'
+                  : '1px solid rgba(255,255,255,0.04)',
+                boxShadow: active ? '0 0 12px rgba(245,158,11,0.1)' : 'none',
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span style={{ fontSize: 14 }}>{s.icon}</span>
+                {done && (
+                  <span style={{ color: '#10b981', fontSize: 12 }}>✓</span>
+                )}
+                {active && (
+                  <div
+                    className="w-3 h-3 rounded-full border border-t-transparent animate-spin"
+                    style={{ borderColor: '#f59e0b', borderTopColor: 'transparent' }}
+                  />
+                )}
+              </div>
+              <p
+                className="text-[10px] font-medium leading-tight"
+                style={{
+                  color: done ? '#10b981' : active ? '#f59e0b' : '#3a3856',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {s.label}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-6 pb-5">
+        <div
+          className="h-1 rounded-full overflow-hidden"
+          style={{ background: 'rgba(255,255,255,0.05)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.max(4, ((activeStepIndex + 1) / AGENT_STEPS.length) * 100)}%`,
+              background: 'linear-gradient(to right, #f59e0b, #fbbf24)',
+              boxShadow: '0 0 8px rgba(245,158,11,0.6)',
+            }}
+          />
+        </div>
+        <p
+          className="text-[10px] mt-2 text-right tabular"
+          style={{ color: '#3a3856' }}
+        >
+          {activeStepIndex + 1} / {AGENT_STEPS.length}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ExecuteResults({ results }: { results: ExecResult[] }) {
   return (
     <ul className="space-y-1 mt-3">
@@ -273,10 +426,7 @@ export default function Assistant() {
   // UI-only state — not persisted
   const [error, setError] = useState('');
   const [progressLog, setProgressLog] = useState<{ step: string; message: string; debug?: boolean }[]>([]);
-  const [showDebug, setShowDebug] = useState(false);
-  const [showConsole, setShowConsole] = useState(false);
   const [llmIO, setLlmIO] = useState<{ pass: string; input: { system: string; user: string }; output: string }[]>([]);
-  const [showLlmIO, setShowLlmIO] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [execResults, setExecResults] = useState<ExecResult[] | null>(null);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
@@ -303,7 +453,6 @@ export default function Assistant() {
     setError('');
     setProgressLog([]);
     setLlmIO([]);
-    setShowConsole(true);
     setExecResults(null);
 
     try {
@@ -325,7 +474,6 @@ export default function Assistant() {
           } else if (event.type === 'result') {
             const data = event as any as BriefingResult & { type: string };
             setBriefingResultStore(data);
-            setShowConsole(false);
 
             // Default: select all unlogged events that matched an account
             const initSelected = new Set<string>();
@@ -683,76 +831,9 @@ export default function Assistant() {
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700">{error}</div>
       )}
 
-      {/* Progress log */}
-      {(status === 'loading' || (status === 'done' && showConsole)) && (
-        <div className="bg-slate-900 rounded-2xl px-5 py-4 space-y-1 shadow-sm">
-          {progressLog.filter(p => showDebug || !p.debug).map((p, i) => {
-            const visibleLog = progressLog.filter(x => showDebug || !x.debug);
-            const isLast = i === visibleLog.length - 1;
-            if (p.debug) return (
-              <div key={i} className="flex items-start gap-2 pl-3">
-                <span className="text-slate-600 shrink-0 mt-0.5">›</span>
-                <span className="text-[10px] text-slate-500 font-mono">{p.message}</span>
-              </div>
-            );
-            return (
-              <div key={i} className="flex items-center gap-2.5">
-                {status === 'loading' && isLast
-                  ? <Loader2 size={11} className="text-blue-400 animate-spin shrink-0" />
-                  : <CheckCircle2 size={11} className="text-emerald-400 shrink-0" />}
-                <span className={`text-xs ${isLast && status === 'loading' ? 'text-slate-200' : 'text-slate-400'}`}>{p.message}</span>
-              </div>
-            );
-          })}
-          {status === 'loading' && progressLog.filter(p => !p.debug).length === 0 && (
-            <div className="flex items-center gap-2.5">
-              <Loader2 size={11} className="text-blue-400 animate-spin shrink-0" />
-              <span className="text-xs text-slate-200">Starting…</span>
-            </div>
-          )}
-          <div className="flex items-center gap-3 pt-1">
-            <button onClick={() => setShowDebug(v => !v)} className="text-[10px] text-slate-600 hover:text-slate-400">
-              {showDebug ? 'Hide debug' : 'Show debug'}
-            </button>
-            <button onClick={() => setShowConsole(false)} className="text-[10px] text-slate-600 hover:text-slate-400 ml-auto">
-              Hide ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* LLM I/O panel */}
-      {llmIO.length > 0 && (
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-          <div
-            className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-slate-900 transition-colors"
-            onClick={() => setShowLlmIO(v => !v)}
-          >
-            <span className="text-[11px] font-mono text-slate-400">LLM I/O ({llmIO.length} call{llmIO.length !== 1 ? 's' : ''})</span>
-            <span className="text-[10px] text-slate-600">{showLlmIO ? 'hide ▲' : 'show ▼'}</span>
-          </div>
-          {showLlmIO && (
-            <div className="divide-y divide-slate-800">
-              {llmIO.map((entry, i) => (
-                <div key={i} className="px-4 py-3 space-y-2">
-                  <div className="text-[10px] font-mono text-blue-400 font-semibold">Pass {entry.pass}</div>
-                  <details className="group">
-                    <summary className="text-[10px] font-mono text-slate-500 cursor-pointer hover:text-slate-300 select-none">▶ system prompt</summary>
-                    <pre className="mt-1 text-[9px] font-mono text-slate-400 whitespace-pre-wrap break-all bg-slate-900 rounded p-2 max-h-48 overflow-y-auto">{entry.input.system}</pre>
-                  </details>
-                  <details className="group">
-                    <summary className="text-[10px] font-mono text-slate-500 cursor-pointer hover:text-slate-300 select-none">▶ user input</summary>
-                    <pre className="mt-1 text-[9px] font-mono text-slate-400 whitespace-pre-wrap break-all bg-slate-900 rounded p-2 max-h-48 overflow-y-auto">{entry.input.user}</pre>
-                  </details>
-                  <details open className="group">
-                    <summary className="text-[10px] font-mono text-emerald-500 cursor-pointer hover:text-emerald-300 select-none">▶ output</summary>
-                    <pre className="mt-1 text-[9px] font-mono text-emerald-300 whitespace-pre-wrap break-all bg-slate-900 rounded p-2 max-h-48 overflow-y-auto">{entry.output}</pre>
-                  </details>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Agent loading screen */}
+      {status === 'loading' && (
+        <AgentLoadingScreen progressLog={progressLog} />
       )}
 
       {/* Result */}
@@ -760,11 +841,6 @@ export default function Assistant() {
         <div className="space-y-4">
           {/* Meta bar */}
           <div className="flex items-center gap-3 flex-wrap text-xs text-slate-500">
-            {!showConsole && progressLog.length > 0 && (
-              <button onClick={() => setShowConsole(true)} className="text-[10px] text-slate-400 hover:text-slate-600 underline underline-offset-2">
-                Show log
-              </button>
-            )}
             <span className="bg-slate-100 rounded-lg px-3 py-1.5">
               <span className="font-semibold text-slate-700">{result.meta.totalCalEvents}</span> cal events
             </span>
