@@ -1,4 +1,8 @@
 node_modules/
-client/
-server/
+client/node_modules/
+server/node_modules/
+client/dist/
 .DS_Store
+.sessions/
+*.env
+

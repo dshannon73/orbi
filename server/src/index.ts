@@ -22,7 +22,7 @@ import dsrRouter from './routes/dsr';
 import { createSlackReceiver } from './services/slack';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
