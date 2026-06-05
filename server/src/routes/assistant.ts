@@ -5,10 +5,17 @@ import { getConnection } from '../sf';
 const router = Router();
 
 // ── LLM client (SF LLM Gateway Express; OpenAI-compatible) ──
-const llmGateway = new OpenAI({
-  apiKey: process.env.ENG_AI_MODEL_GW_KEY,
-  baseURL: 'https://eng-ai-model-gateway.sfproxy.devx-preprod.aws-esvc1-useast2.aws.sfdc.cl',
-});
+// Lazy init to avoid startup crash when ENG_AI_MODEL_GW_KEY is not set
+let _llmGateway: OpenAI | null = null;
+function getLLMGateway(): OpenAI {
+  if (!_llmGateway) {
+    _llmGateway = new OpenAI({
+      apiKey: process.env.ENG_AI_MODEL_GW_KEY || 'missing',
+      baseURL: 'https://eng-ai-model-gateway.sfproxy.devx-preprod.aws-esvc1-useast2.aws.sfdc.cl',
+    });
+  }
+  return _llmGateway;
+}
 
 function stripFences(raw: string): string {
   return raw.replace(/^```[a-z]*\n?/i, '').replace(/```\s*$/i, '').trim();
@@ -19,7 +26,7 @@ async function callLLM(
   userContent: string,
   onIO?: (input: { system: string; user: string }, output: string) => void,
 ): Promise<string> {
-  const res = await llmGateway.chat.completions.create({
+  const res = await getLLMGateway().chat.completions.create({
     model: 'claude-sonnet-4-20250514',
     messages: [
       { role: 'system', content: systemPrompt },
@@ -1488,7 +1495,7 @@ Rules:
 \`\`\`
 - If you need clarification first, ask in ONE short question only.`;
 
-    const completion = await llmGateway.chat.completions.create({
+    const completion = await getLLMGateway().chat.completions.create({
       model: 'claude-sonnet-4-20250514',
       messages: [
         { role: 'system', content: systemPrompt },
