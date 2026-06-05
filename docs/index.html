@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Your Own Orbi — AI SE Command Center</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0e0d1a;
+    --surface: #141325;
+    --surface-2: #1a1929;
+    --border: #2a2840;
+    --text: #e2e8f0;
+    --text-muted: #9ca3af;
+    --text-dim: #4a4860;
+    --amber: #f59e0b;
+    --amber-dim: rgba(245, 158, 11, 0.15);
+    --amber-glow: rgba(245, 158, 11, 0.08);
+    --blue: #00b5e2;
+    --purple: #8b5cf6;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  a { color: var(--amber); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 100px 24px 80px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse at 30% 50%, rgba(245,158,11,0.07) 0%, transparent 55%),
+      radial-gradient(ellipse at 75% 40%, rgba(0,181,226,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 80%, rgba(139,92,246,0.05) 0%, transparent 50%),
+      var(--bg);
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 800;
+    letter-spacing: -2px;
+    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .hero .tagline {
+    font-size: 18px;
+    color: var(--text-muted);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .hero .tagline strong {
+    color: var(--text);
+  }
+
+  /* Sections */
+  section {
+    padding: 64px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  section h2 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: var(--text);
+  }
+
+  section h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    color: var(--amber);
+  }
+
+  section p, section li {
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  section ul, section ol {
+    padding-left: 20px;
+  }
+
+  section ol li {
+    margin-bottom: 16px;
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--amber);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Code blocks */
+  pre {
+    background: #0d0c18;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+  }
+
+  pre code {
+    color: #e2e8f0;
+  }
+
+  p code, li code {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--amber);
+    font-size: 12px;
+  }
+
+  /* Syntax highlighting (inline) */
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmt { color: #546e7a; }
+  .fn { color: #82aaff; }
+  .num { color: #f78c6c; }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+
+  .arch-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    min-width: 100px;
+  }
+
+  .arch-box.source { border-color: var(--blue); color: var(--blue); }
+  .arch-box.engine { border-color: var(--amber); color: var(--amber); }
+  .arch-box.output { border-color: var(--purple); color: var(--purple); }
+
+  .arch-arrow {
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+
+  .arch-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    margin: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* Gotcha cards */
+  .gotcha-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .gotcha {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  .gotcha h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .gotcha p {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* Steps */
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin: 16px 0;
+  }
+
+  .step-number {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    background: var(--amber-dim);
+    color: var(--amber);
+    border-radius: 50%;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 12px;
+  }
+
+  .step h4 {
+    display: inline;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .step p {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+
+  /* Tech stack badges */
+  .badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .badge {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  /* Footer */
+  footer {
+    padding: 40px 24px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+
+  footer p {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  footer .brand {
+    font-size: 20px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .hero { padding: 60px 16px 48px; }
+    section { padding: 40px 16px; }
+    .arch-row { flex-direction: column; }
+    .arch-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="container">
+    <h1>Build Your Own Orbi</h1>
+    <p class="tagline">An AI SE Command Center you can build yourself in a weekend with <strong>Claude Code</strong></p>
+  </div>
+</header>
+
+<!-- What You'll Build -->
+<section>
+  <div class="container">
+    <h2>What You'll Build</h2>
+    <p>Orbi is an AI-powered command center for Salesforce Solutions Engineers. It automates quarterly "App Rigor" admin — the tedious but mandatory work of logging activities, filing Deal Contributions, and drafting DSR status updates — by connecting Google Calendar, Salesforce org62, Slack, and Gmail into a single intelligent workflow.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>Activity Logging</h4>
+        <p>Pull Google Calendar events, AI-classify them by SE Task Type, match to accounts/opportunities, and batch-log to Salesforce with one click.</p>
+      </div>
+      <div class="card">
+        <h4>DC Gap Detection</h4>
+        <p>Identify opportunities where you have activity but no Deal Contribution. Auto-suggest split percentages based on engagement.</p>
+      </div>
+      <div class="card">
+        <h4>DSR Status Drafts</h4>
+        <p>Research Slack, Calendar, and Drive for each active DSR, then draft Status Comments and Next Steps with cited sources.</p>
+      </div>
+      <div class="card">
+        <h4>Slack Canvas Rollups</h4>
+        <p>Generate formatted activity and DC rollup canvases posted directly to Slack for manager visibility.</p>
+      </div>
+      <div class="card">
+        <h4>Embedded Terminal</h4>
+        <p>A full Claude Code session inside the UI — run SE skills, query SF, and automate workflows without leaving the app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Prerequisites -->
+<section>
+  <div class="container">
+    <h2>Prerequisites</h2>
+    <div class="card-grid">
+      <div class="card">
+        <h4>Salesforce org62</h4>
+        <p>Active org62 access with SE_Task_Type__c, Deal_Contribution__c, and Deal_Support_Request__c objects. SF CLI installed and authenticated.</p>
+      </div>
+      <div class="card">
+        <h4>Google Cloud Project</h4>
+        <p>OAuth 2.0 credentials with Calendar (read) scope. Redirect URI pointed at your dev server.</p>
+      </div>
+      <div class="card">
+        <h4>Slack MCP (aisuite)</h4>
+        <p>Slack workspace access via the aisuite MCP adaptor. Bot token with channels:read, chat:write, and canvas scopes.</p>
+      </div>
+      <div class="card">
+        <h4>Claude Code CLI</h4>
+        <p>Anthropic's Claude Code CLI installed at ~/.local/bin/claude. Used for the embedded terminal and DSR research agent.</p>
+      </div>
+      <div class="card">
+        <h4>Node.js 18+</h4>
+        <p>Runtime for both the Express backend (TypeScript via ts-node) and the React/Vite frontend.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section>
+  <div class="container">
+    <h2>Architecture</h2>
+    <div class="arch-diagram">
+      <div class="arch-label">Data Sources</div>
+      <div class="arch-row">
+        <div class="arch-box source">Google Calendar</div>
+        <div class="arch-box source">Salesforce org62</div>
+        <div class="arch-box source">Slack MCP</div>
+        <div class="arch-box source">Gmail</div>
+      </div>
+
+      <div class="arch-row">
+        <div class="arch-arrow">|</div>
+      </div>
+
+      <div class="arch-label">Backend (Node/Express + TypeScript)</div>
+      <div class="arch-row">
+        <div class="arch-box engine">Orbi Server</div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-box engine">Claude LLM</div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-box engine">Claude CLI</div>
+      </div>
+
+      <div class="arch-row">
+        <div class="arch-arrow">|</div>
+      </div>
+
+      <div class="arch-label">Frontend (React + Vite + Tailwind)</div>
+      <div class="arch-row">
+        <div class="arch-box output">Review UI</div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-box output">Terminal Panel</div>
+      </div>
+
+      <div class="arch-row">
+        <div class="arch-arrow">|</div>
+      </div>
+
+      <div class="arch-label">Write Targets</div>
+      <div class="arch-row">
+        <div class="arch-box source">Salesforce org62</div>
+        <div class="arch-box source">Slack Canvas</div>
+      </div>
+    </div>
+
+    <p>The backend acts as the orchestration layer: it pulls data from Calendar and Salesforce, resolves attendees to SF users, matches events to accounts using both deterministic signals (name matching, domain overlap, attendee ownership) and an LLM pass (task type classification, ambiguous account resolution). The frontend presents a review UI for human approval before any DML writes.</p>
+  </div>
+</section>
+
+<!-- Step-by-Step Setup -->
+<section>
+  <div class="container">
+    <h2>Step-by-Step Setup</h2>
+
+    <div class="step">
+      <span class="step-number">1</span>
+      <h4>Clone and Install</h4>
+      <pre><code>git clone https://github.com/your-org/orbi.git
+<span class="kw">cd</span> orbi
+npm install
+<span class="kw">cd</span> server && npm install
+<span class="kw">cd</span> ../client && npm install</code></pre>
+    </div>
+
+    <div class="step">
+      <span class="step-number">2</span>
+      <h4>Salesforce CLI Auth</h4>
+      <p>Authenticate against your org62 instance:</p>
+      <pre><code>sf org login web --alias org62 --instance-url https://org62.my.salesforce.com</code></pre>
+      <p>The server reads the SF CLI session file directly via <code>sf org display --target-org org62 --json</code> — no manual token management needed. It auto-refreshes on each request.</p>
+    </div>
+
+    <div class="step">
+      <span class="step-number">3</span>
+      <h4>Google OAuth Setup</h4>
+      <p>Create a Google Cloud project with the Calendar API enabled. Configure an OAuth 2.0 consent screen and create Web Application credentials.</p>
+      <pre><code><span class="cmt"># In server/.env</span>
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-secret
+GOOGLE_REDIRECT_URI=http://localhost:3001/api/calendar/oauth/callback</code></pre>
+      <p>Users connect via the in-app flow: the server redirects to Google consent, receives the callback, and stores tokens in the session.</p>
+    </div>
+
+    <div class="step">
+      <span class="step-number">4</span>
+      <h4>Slack Integration</h4>
+      <p>Create a Slack app with <code>channels:read</code>, <code>chat:write</code>, and canvas permissions. Add the tokens to your env:</p>
+      <pre><code><span class="cmt"># In server/.env</span>
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_SIGNING_SECRET=your-signing-secret</code></pre>
+      <p>For the embedded terminal's Slack search capabilities, configure the aisuite MCP adaptor separately.</p>
+    </div>
+
+    <div class="step">
+      <span class="step-number">5</span>
+      <h4>Environment Variables</h4>
+      <p>Full <code>server/.env</code> template:</p>
+      <pre><code><span class="cmt"># Salesforce (fallback if CLI unavailable)</span>
+SF_INSTANCE_URL=https://org62.my.salesforce.com
+SF_ACCESS_TOKEN=
+
+<span class="cmt"># Slack</span>
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+
+<span class="cmt"># Google Calendar OAuth</span>
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3001/api/calendar/oauth/callback
+
+<span class="cmt"># LLM Gateway (for AI classification)</span>
+ENG_AI_MODEL_GW_KEY=...
+
+<span class="cmt"># Session</span>
+SESSION_SECRET=a-random-secret-string
+PORT=3001</code></pre>
+    </div>
+
+    <div class="step">
+      <span class="step-number">6</span>
+      <h4>Run Dev Server</h4>
+      <pre><code><span class="cmt"># From project root — starts both server and client</span>
+npm run dev
+
+<span class="cmt"># Or individually:</span>
+npm run dev:server  <span class="cmt"># Express on :3001</span>
+npm run dev:client  <span class="cmt"># Vite on :5173</span></code></pre>
+      <p>Open <code>http://localhost:5173</code> and log in. The app authenticates via the SF CLI token for your org62 alias.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Key Gotchas -->
+<section>
+  <div class="container">
+    <h2>Key Gotchas</h2>
+    <p>Four hard lessons learned during the build:</p>
+
+    <div class="gotcha-grid">
+      <div class="gotcha">
+        <h4>MCP is not directly callable from Node</h4>
+        <p>You cannot import MCP tools into a Node server. The solution: spawn Claude CLI as a subprocess with <code>--print --dangerously-skip-permissions --output-format stream-json</code>. Pipe your prompt to stdin, stream JSON events from stdout. The terminal and DSR review features both use this pattern.</p>
+      </div>
+      <div class="gotcha">
+        <h4>Auth across 5 systems</h4>
+        <p>SF CLI session file, Google token refresh, Slack bot token, LLM gateway key, and Express session cookies all need to stay valid simultaneously. SF CLI handles its own refresh transparently. Google tokens are refreshed proactively on each /status check. Session uses file-store with 1-year TTL.</p>
+      </div>
+      <div class="gotcha">
+        <h4>Claude safety filters</h4>
+        <p>Spawning Claude CLI fails if you pass prompts that look like jailbreak attempts. Use natural language prompts, set a neutral working directory (not /tmp), and avoid system-level instructions that trigger refusal. The DSR prompt works because it reads like a legitimate workflow instruction.</p>
+      </div>
+      <div class="gotcha">
+        <h4>State management: pick ONE layer</h4>
+        <p>Early versions had state in React state, Zustand stores, URL params, AND session simultaneously. The fix: Zustand for UI state (filters, panel open/close), Express session for auth identity, and Salesforce as the single source of truth for data. No local caching of SF records.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Extend It -->
+<section>
+  <div class="container">
+    <h2>Extend It</h2>
+
+    <h3>Add a New Agent</h3>
+    <p>Agents in Orbi are Express routes that spawn Claude CLI with a tailored prompt. To add one:</p>
+    <ol>
+      <li>Create <code>server/src/routes/yourAgent.ts</code> with a POST endpoint</li>
+      <li>Set SSE headers (<code>Content-Type: text/event-stream</code>)</li>
+      <li>Pre-fetch any Salesforce data the agent needs (skip expensive LLM-driven lookups)</li>
+      <li>Build a detailed prompt with the pre-fetched context</li>
+      <li>Spawn <code>claude --print --dangerously-skip-permissions --output-format stream-json --verbose</code></li>
+      <li>Pipe the prompt to stdin, stream stdout events as SSE <code>data:</code> frames</li>
+      <li>Register the route in <code>server/src/index.ts</code></li>
+    </ol>
+
+    <h3>Add a New Data Source</h3>
+    <ol>
+      <li>Add the API client to <code>server/package.json</code> dependencies</li>
+      <li>Create a service file in <code>server/src/services/</code> for auth and client setup</li>
+      <li>Create a route in <code>server/src/routes/</code> that exposes the data via REST</li>
+      <li>For OAuth-based sources, follow the Google Calendar pattern: /connect endpoint redirects to consent, /callback stores tokens in session, /status checks validity</li>
+      <li>Add the corresponding page in <code>client/src/pages/</code> with React Query for data fetching</li>
+    </ol>
+  </div>
+</section>
+
+<!-- Built With -->
+<section>
+  <div class="container">
+    <h2>Built With</h2>
+    <div class="badge-row">
+      <span class="badge">Claude Code (Anthropic)</span>
+      <span class="badge">React 19</span>
+      <span class="badge">Node.js / Express</span>
+      <span class="badge">TypeScript</span>
+      <span class="badge">Vite</span>
+      <span class="badge">Tailwind CSS</span>
+      <span class="badge">Zustand</span>
+      <span class="badge">React Query</span>
+      <span class="badge">Salesforce SF CLI</span>
+      <span class="badge">jsforce</span>
+      <span class="badge">Google Calendar API</span>
+      <span class="badge">Slack Bolt</span>
+      <span class="badge">Radix UI</span>
+      <span class="badge">Lucide Icons</span>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="brand">Orbi</div>
+    <p>Built by Dan Shannon &middot; Distinguished SE &middot; Salesforce &middot; Vibe Coding Competition 2026</p>
+  </div>
+</footer>
+
+</body>
+</html>
