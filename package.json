@@ -13,7 +13,7 @@
     "concurrently": "^8.2.2"
   },
   "engines": {
-    "node": "18.x"
+    "node": "20.x"
   },
   "dependencies": {
     "express": "^5.2.1"
