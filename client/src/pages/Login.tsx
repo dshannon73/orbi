@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi } from '@/api';
+import { authApi, apiUrl } from '@/api';
 import { useAuthStore } from '@/store/auth';
 
 export default function Login() {
@@ -34,7 +34,7 @@ export default function Login() {
     // Launch browser-based reconnect via SSE
     setStatus('Opening Salesforce login in your browser…');
     try {
-      const res = await fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/auth/reconnect`, {
+      const res = await fetch(apiUrl('/api/auth/reconnect'), {
         method: 'POST',
         credentials: 'include',
       });

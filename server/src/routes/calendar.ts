@@ -1,92 +1,42 @@
 import { Router } from 'express';
-import { google } from 'googleapis';
+import { spawn } from 'child_process';
 import { getConnection } from '../sf';
 
 const router = Router();
 
-function getOAuth2Client() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-}
+const CLAUDE_PATH = '/Users/dshannon/.local/bin/claude';
+const CLAUDE_ENV = { ...process.env, PATH: `${process.env.PATH}:/Users/dshannon/.local/bin` };
 
-declare module 'express-session' {
-  interface SessionData {
-    googleTokens?: {
-      access_token: string | null;
-      refresh_token: string | null;
-      expiry_date: number | null;
-    };
-  }
-}
+function runClaude(prompt: string, timeoutMs = 60_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(CLAUDE_PATH, ['--print', '--dangerously-skip-permissions', '--output-format', 'text'], {
+      env: CLAUDE_ENV,
+    });
 
-// GET /api/calendar/oauth/connect — redirect user to Google consent page
-router.get('/oauth/connect', (req, res) => {
-  const returnTo = req.query.returnTo as string | undefined;
-  if (returnTo) (req.session as any).oauthReturnTo = returnTo;
-  const auth = getOAuth2Client();
-  const url = auth.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/calendar.readonly'],
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error('claude subprocess timed out'));
+    }, timeoutMs);
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`claude exited ${code}: ${stderr.trim()}`));
+      resolve(stdout.trim());
+    });
+
+    proc.stdin.write(prompt);
+    proc.stdin.end();
   });
-  res.redirect(url);
-});
+}
 
-// GET /api/calendar/oauth/callback — Google redirects here after consent
-router.get('/oauth/callback', async (req, res) => {
-  const { code } = req.query as { code: string };
-  if (!code) return res.status(400).send('Missing code');
-
-  try {
-    const auth = getOAuth2Client();
-    const { tokens } = await auth.getToken(code);
-    req.session.googleTokens = {
-      access_token: tokens.access_token ?? null,
-      refresh_token: tokens.refresh_token ?? null,
-      expiry_date: tokens.expiry_date ?? null,
-    };
-    const returnTo = (req.session as any).oauthReturnTo as string | undefined;
-    delete (req.session as any).oauthReturnTo;
-    await new Promise<void>((resolve, reject) => req.session.save(e => e ? reject(e) : resolve()));
-    res.redirect(returnTo ?? 'http://localhost:5173/calendar');
-  } catch (err: any) {
-    res.status(500).send('OAuth error: ' + err.message);
-  }
-});
-
-// GET /api/calendar/status — is the user connected?
-// If access token is expired but refresh token exists, proactively refresh it.
-router.get('/status', async (req, res) => {
-  const tokens = req.session.googleTokens;
-  if (!tokens?.access_token) return res.json({ connected: false });
-
-  const isExpired = tokens.expiry_date ? tokens.expiry_date < Date.now() + 60_000 : false;
-  if (isExpired && tokens.refresh_token) {
-    try {
-      const auth = getOAuth2Client();
-      auth.setCredentials(tokens);
-      const { credentials } = await auth.refreshAccessToken();
-      req.session.googleTokens = {
-        access_token: credentials.access_token ?? tokens.access_token,
-        refresh_token: credentials.refresh_token ?? tokens.refresh_token,
-        expiry_date: credentials.expiry_date ?? null,
-      };
-      await new Promise<void>((resolve, reject) => req.session.save(e => e ? reject(e) : resolve()));
-    } catch {
-      // refresh failed — still connected if access token hasn't hard-expired
-    }
-  }
-
-  res.json({ connected: true });
-});
-
-// DELETE /api/calendar/disconnect
-router.delete('/disconnect', (req, res) => {
-  req.session.googleTokens = undefined;
-  res.json({ ok: true });
+// GET /api/calendar/status — always connected when MCP is configured
+router.get('/status', (_req, res) => {
+  res.json({ connected: true, method: 'mcp' });
 });
 
 // SF fiscal year starts Feb 1. FQ: Q1=Feb-Apr, Q2=May-Jul, Q3=Aug-Oct, Q4=Nov-Jan
@@ -179,11 +129,8 @@ function dateRange(preset: string, customFrom?: string, customTo?: string): { ti
   return { timeMin: start.toISOString(), timeMax: end.toISOString() };
 }
 
-// GET /api/calendar/events
+// GET /api/calendar/events — fetch via Google Calendar MCP through Claude subprocess
 router.get('/events', async (req, res) => {
-  const tokens = req.session.googleTokens;
-  if (!tokens?.access_token) return res.status(401).json({ error: 'Not connected to Google Calendar' });
-
   const {
     datePreset = 'current_fq',
     dateFrom, dateTo,
@@ -191,43 +138,40 @@ router.get('/events', async (req, res) => {
     currentUserId,
   } = req.query as Record<string, string>;
 
+  const { timeMin, timeMax } = dateRange(datePreset, dateFrom, dateTo);
+
+  const prompt = [
+    `Use the google-workspace MCP tool get_events with these parameters:`,
+    `  timeMin: "${timeMin}"`,
+    `  timeMax: "${timeMax}"`,
+    `  maxResults: 500`,
+    `  singleEvents: true`,
+    `  orderBy: "startTime"`,
+    ``,
+    `Return ONLY a valid JSON array of calendar event objects. No explanation, no markdown, no code fences.`,
+    `Each event object should include: id, summary, start, end, attendees, description, location, htmlLink, hangoutLink, organizer, creator.`,
+    `If there are no events, return an empty array: []`,
+  ].join('\n');
+
   try {
-    const auth = getOAuth2Client();
-    auth.setCredentials({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token ?? undefined,
-      expiry_date: tokens.expiry_date ?? undefined,
-    });
+    const raw = await runClaude(prompt, 90_000);
 
-    auth.on('tokens', (newTokens) => {
-      if (newTokens.access_token) {
-        req.session.googleTokens = {
-          access_token: newTokens.access_token,
-          refresh_token: newTokens.refresh_token ?? tokens.refresh_token ?? null,
-          expiry_date: newTokens.expiry_date ?? null,
-        };
-        req.session.save(() => {});
-      }
-    });
+    // Strip markdown code fences if present
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```\s*$/, '')
+      .trim();
 
-    const cal = google.calendar({ version: 'v3', auth });
-    const { timeMin, timeMax } = dateRange(datePreset, dateFrom, dateTo);
-
-    const response = await cal.events.list({
-      calendarId: 'primary',
-      timeMin,
-      timeMax,
-      maxResults: 500,
-      singleEvents: true,
-      orderBy: 'startTime',
-    });
-
-    let events = response.data.items ?? [];
+    let events: any[] = [];
+    try {
+      const parsed = JSON.parse(cleaned);
+      events = Array.isArray(parsed) ? parsed : (parsed.items ?? parsed.events ?? []);
+    } catch {
+      return res.status(500).json({ error: 'Failed to parse calendar response from MCP', raw: raw.slice(0, 500) });
+    }
 
     // Parse filter string into include/exclude term lists.
-    // Each comma-separated term prefixed with - or ! is an exclude; otherwise include.
     function parseTerms(filter: string) {
-      // Split on commas that are NOT inside quotes
       const parts: string[] = [];
       let cur = '', inQuote = false;
       for (let i = 0; i < filter.length; i++) {
@@ -271,14 +215,13 @@ router.get('/events', async (req, res) => {
     if (attendee) events = events.filter(e => matchesAttendee(e.attendees ?? [], attendee));
     if (description) events = events.filter(e => matchesField(e.description ?? '', description));
 
-    // Match against SF Events: scoped to current user to avoid large-org timeout
+    // Match against SF Events
     try {
       const conn = getConnection();
       const ownerClause = currentUserId ? ` AND OwnerId = '${currentUserId}'` : '';
       const sfResult = await conn.query<{ Id: string; Subject: string; StartDateTime: string }>(
         `SELECT Id, Subject, StartDateTime FROM Event WHERE StartDateTime >= ${timeMin} AND StartDateTime <= ${timeMax} AND StartDateTime != null${ownerClause}`
       );
-      // Map "date|subject" → SF record Id
       const sfMap = new Map<string, string>();
       for (const sfEvt of sfResult.records) {
         const day = sfEvt.StartDateTime.slice(0, 10);
@@ -310,10 +253,6 @@ router.get('/events', async (req, res) => {
 
     res.json({ events, timeMin, timeMax });
   } catch (err: any) {
-    if (err.code === 401 || err.message?.includes('invalid_grant')) {
-      req.session.googleTokens = undefined;
-      return res.status(401).json({ error: 'Google session expired — please reconnect' });
-    }
     res.status(500).json({ error: err.message });
   }
 });

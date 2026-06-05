@@ -5,7 +5,7 @@ import {
   CheckCircle2, Circle, AlertTriangle, Send, CalendarDays,
   Building2, Clock, PlusCircle, LogIn, Search, X, LayoutList, Layers,
 } from 'lucide-react';
-import { assistantApi, activitiesApi, calendarApi, metaApi } from '@/api';
+import { assistantApi, activitiesApi, metaApi } from '@/api';
 import { useAuthStore } from '@/store/auth';
 import { usePageFilters } from '@/store/pageFilters';
 import {
@@ -337,10 +337,7 @@ export default function Assistant() {
   const { defaultRecordTypeId, defaultSeTaskType, dcLookbackMonths } = useUserPrefs();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [calConnected, setCalConnected] = useState<boolean | null>(null);
-  useEffect(() => {
-    calendarApi.status().then(r => setCalConnected(r.data.connected)).catch(() => setCalConnected(false));
-  }, []);
+  // v2: MCP-based calendar — no OAuth needed
 
   useEffect(() => {
     if (searchParams.get('autorun') === '1') setSearchParams({}, { replace: true });
@@ -725,19 +722,7 @@ export default function Assistant() {
         </p>
       </div>
 
-      {/* Calendar auth banner */}
-      {calConnected === false && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm">
-          <CalendarDays size={20} className="text-amber-500 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-800">Google Calendar not connected</p>
-            <p className="text-xs text-amber-600 mt-0.5">Connect your calendar so Orbi can analyse your meetings.</p>
-          </div>
-          <Button variant="primary" size="sm" onClick={() => calendarApi.connect(`${window.location.origin}/assistant`)}>
-            Connect Calendar
-          </Button>
-        </div>
-      )}
+      {/* v2: MCP calendar — no auth banner needed */}
 
       {/* Inputs */}
       <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-sm space-y-3">
@@ -745,14 +730,7 @@ export default function Assistant() {
         <div className="flex items-end gap-3">
           <DateRangeFilter page={PAGE} defaultPreset="last_30" label="Timeframe" />
           <div className="flex-1" />
-          {calConnected === false ? (
-            <button
-              onClick={() => calendarApi.connect(`${window.location.origin}/assistant`)}
-              className="h-8 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0"
-            >
-              <CalendarDays size={13} /> Connect Calendar
-            </button>
-          ) : confirmRegenerate ? (
+          {confirmRegenerate ? (
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs text-slate-500">Overwrite current briefing?</span>
               <button
@@ -772,11 +750,9 @@ export default function Assistant() {
             <Button variant="primary" size="sm"
               onClick={() => status === 'done' || status === 'error' ? setConfirmRegenerate(true) : handleRun()}
               className="shrink-0 h-8"
-              disabled={status === 'loading' || !currentUser?.id || calConnected === null || (datePreset === 'custom' && (!customFrom || !customTo))}>
+              disabled={status === 'loading' || !currentUser?.id || (datePreset === 'custom' && (!customFrom || !customTo))}>
               {status === 'loading'
                 ? <><Loader2 size={13} className="animate-spin" /> Analyzing…</>
-                : calConnected === null
-                ? <><Loader2 size={13} className="animate-spin" /></>
                 : <><Sparkles size={13} /> Generate Briefing</>}
             </Button>
           )}

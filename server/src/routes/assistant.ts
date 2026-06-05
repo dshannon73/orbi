@@ -305,25 +305,48 @@ router.post('/briefing', async (req, res) => {
     const excludeTerms = parseTerms(parseTermList(calExclude ?? ''));
     const roleTerms = (roleFilter ?? '').split(',').map(r => r.trim()).filter(Boolean);
 
-    // ── 1. Google Calendar ─────────────────────────────────────────────────────
-    send('progress', { step: 'calendar', message: 'Fetching Google Calendar events…' });
+    // ── 1. Google Calendar (v2: via MCP subprocess) ───────────────────────────
+    send('progress', { step: 'calendar', message: 'Fetching Google Calendar events via MCP…' });
     let rawCalEvents: any[] = [];
-    const sessionTokens = (req.session as any)?.googleTokens;
-    if (sessionTokens) {
-      try {
-        const { google } = await import('googleapis');
-        const oauth2 = new google.auth.OAuth2();
-        oauth2.setCredentials(sessionTokens);
-        const cal = google.calendar({ version: 'v3', auth: oauth2 });
-        const gcResp = await cal.events.list({
-          calendarId: 'primary', timeMin: fromDT, timeMax: toDT,
-          singleEvents: true, orderBy: 'startTime', maxResults: 250,
+    try {
+      const { spawn } = await import('child_process');
+      const CLAUDE_PATH = '/Users/dshannon/.local/bin/claude';
+      const CLAUDE_ENV = { ...process.env, PATH: `${process.env.PATH}:/Users/dshannon/.local/bin` };
+      const calPrompt = [
+        `Use the google-workspace MCP tool get_events with these parameters:`,
+        `  timeMin: "${fromDT}"`,
+        `  timeMax: "${toDT}"`,
+        `  maxResults: 250`,
+        `  singleEvents: true`,
+        `  orderBy: "startTime"`,
+        ``,
+        `Return ONLY a valid JSON array of calendar event objects. No explanation, no markdown, no code fences.`,
+        `Each event object should include: id, summary, start, end, attendees, description, location, htmlLink, hangoutLink.`,
+        `If there are no events, return an empty array: []`,
+      ].join('\n');
+
+      const calRaw = await new Promise<string>((resolve, reject) => {
+        const proc = spawn(CLAUDE_PATH, ['--print', '--dangerously-skip-permissions', '--output-format', 'text'], { env: CLAUDE_ENV });
+        let out = '', err = '';
+        proc.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+        proc.stderr.on('data', (d: Buffer) => { err += d.toString(); });
+        const t = setTimeout(() => { proc.kill(); reject(new Error('calendar MCP timeout')); }, 90_000);
+        proc.on('close', code => {
+          clearTimeout(t);
+          if (code !== 0) return reject(new Error(`calendar claude exited ${code}: ${err.trim()}`));
+          resolve(out.trim());
         });
-        rawCalEvents = (gcResp.data.items || []).filter((e: any) => e.status !== 'cancelled' && e.start?.dateTime);
-        send('debug', { message: `Fetched ${rawCalEvents.length} timed events` });
-      } catch (err: any) { send('debug', { message: `Calendar error: ${err.message}` }); }
-    } else {
-      send('debug', { message: 'No Google session — calendar skipped' });
+        proc.stdin.write(calPrompt);
+        proc.stdin.end();
+      });
+
+      const cleaned = calRaw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const items = Array.isArray(parsed) ? parsed : (parsed.items ?? parsed.events ?? []);
+      rawCalEvents = items.filter((e: any) => e.status !== 'cancelled' && e.start?.dateTime);
+      send('debug', { message: `Fetched ${rawCalEvents.length} timed events via MCP` });
+    } catch (err: any) {
+      send('debug', { message: `Calendar MCP error: ${err.message}` });
     }
 
     // Apply exclude filter only (no include — we want all events by default)

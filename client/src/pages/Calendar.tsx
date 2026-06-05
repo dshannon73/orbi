@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Calendar as CalendarIcon, Link2, Link2Off, RefreshCw, Video, LayoutGrid, List, Users, ChevronDown, ChevronUp, CheckCircle2, CloudUpload } from 'lucide-react';
+import { Calendar as CalendarIcon, RefreshCw, Video, LayoutGrid, List, Users, ChevronDown, ChevronUp, CheckCircle2, CloudUpload, Wifi } from 'lucide-react';
 import { LogEventDialog } from '@/components/LogEventDialog';
 import { calendarApi } from '@/api';
 import { PageHeader } from '@/components/PageHeader';
@@ -33,12 +33,13 @@ export default function Calendar() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: statusData, isLoading: statusLoading } = useQuery({
+  // v2: MCP-based calendar — always connected, no OAuth
+  const { data: statusData } = useQuery({
     queryKey: ['calendar-status'],
     queryFn: () => calendarApi.status(),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
-  const connected: boolean = statusData?.data?.connected ?? false;
+  const connected: boolean = statusData?.data?.connected ?? true;
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['calendar-events', datePreset, dateFrom, dateTo, subject, attendee, description],
@@ -59,12 +60,6 @@ export default function Calendar() {
   const events: GCalEvent[] = showLogged ? allEvents : allEvents.filter(e => !e._loggedInSF);
   const timeMin: string = data?.data?.timeMin ?? '';
   const timeMax: string = data?.data?.timeMax ?? '';
-
-  async function handleDisconnect() {
-    await calendarApi.disconnect();
-    queryClient.invalidateQueries({ queryKey: ['calendar-status'] });
-    queryClient.removeQueries({ queryKey: ['calendar-events'] });
-  }
 
   const allSelected = events.length > 0 && events.every(e => selected.has(e.id));
   const someSelected = selected.size > 0;
@@ -97,21 +92,14 @@ export default function Calendar() {
           : 'Google Calendar'}
       />
 
-      {/* Connect banner */}
-      {!statusLoading && !connected && (
+      {/* MCP status indicator — v2 is always connected via MCP */}
+      {!connected && (
         <div className="mb-6 flex flex-col items-center justify-center py-16 gap-4 bg-white rounded-xl border border-slate-200 shadow-sm">
           <CalendarIcon size={40} className="text-slate-300" />
           <div className="text-center">
-            <p className="text-sm font-semibold text-slate-700">Connect your Google Calendar</p>
-            <p className="text-xs text-slate-400 mt-1">Read-only access to your primary calendar</p>
+            <p className="text-sm font-semibold text-slate-700">Calendar unavailable</p>
+            <p className="text-xs text-slate-400 mt-1">Google Calendar MCP is not responding. Ensure the aisuite MCP server is running.</p>
           </div>
-          <button
-            onClick={() => calendarApi.connect()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
-          >
-            <Link2 size={15} />
-            Connect Google Calendar
-          </button>
         </div>
       )}
 
@@ -165,12 +153,12 @@ export default function Calendar() {
                 >
                   <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
                 </button>
-                <button
-                  onClick={handleDisconnect}
-                  className="flex items-center gap-1.5 h-8 px-2.5 text-xs text-slate-400 hover:text-red-600 rounded-md border border-slate-200 hover:border-red-200 hover:bg-red-50 transition-colors"
+                <span
+                  className="flex items-center gap-1.5 h-8 px-2.5 text-xs text-emerald-600 rounded-md border border-emerald-200 bg-emerald-50"
+                  title="Google Calendar connected via MCP"
                 >
-                  <Link2Off size={12} /> Disconnect
-                </button>
+                  <Wifi size={12} /> MCP Connected
+                </span>
               </div>
             </div>
           </div>

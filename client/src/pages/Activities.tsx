@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { activitiesApi, useGlobalParams } from '@/api';
+import { activitiesApi, useGlobalParams, apiUrl } from '@/api';
 import { DataTable, type ColumnDef } from '@/components/DataTable';
 import { GlobalFilterBar } from '@/components/GlobalFilterBar';
 import { ColumnPicker } from '@/components/ColumnPicker';
@@ -62,7 +62,7 @@ export default function Activities() {
   const { data: rtResult } = useQuery({
     queryKey: ['event-record-types'],
     queryFn: async () => {
-      const r = await fetch('http://localhost:3001/api/activities/record-types', { credentials: 'include' });
+      const r = await fetch(apiUrl('/api/activities/record-types'), { credentials: 'include' });
       return r.json() as Promise<{ values: { Id: string; Name: string }[] }>;
     },
     staleTime: Infinity,

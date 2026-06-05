@@ -2,7 +2,20 @@ import axios from 'axios';
 import { useFilters } from '@/store/filters';
 import { useAuthStore } from '@/store/auth';
 
-const api = axios.create({ baseURL: `${window.location.protocol}//${window.location.hostname}:3001/api`, withCredentials: true });
+// In production (Heroku) client and server share the same origin.
+// In dev, the server runs on :3001.
+const apiBase = import.meta.env.PROD
+  ? '/api'
+  : `${window.location.protocol}//${window.location.hostname}:3001/api`;
+
+/** Absolute URL for raw fetch() calls (SSE streams etc.) */
+export function apiUrl(path: string) {
+  return import.meta.env.PROD
+    ? path
+    : `${window.location.protocol}//${window.location.hostname}:3001${path}`;
+}
+
+const api = axios.create({ baseURL: apiBase, withCredentials: true });
 
 // Redirect to login on any 401 so a lost session doesn't leave the app in a broken state
 api.interceptors.response.use(
@@ -101,7 +114,7 @@ export const assistantApi = {
     },
     onEvent: (event: { type: string; [k: string]: any }) => void,
   ): Promise<void> =>
-    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/assistant/briefing`, {
+    fetch(apiUrl('/api/assistant/briefing'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -134,7 +147,7 @@ export const assistantApi = {
 
 export const terminalApi = {
   run: (messages: { role: string; content: string }[], signal?: AbortSignal): Promise<Response> =>
-    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/terminal/run`, {
+    fetch(apiUrl('/api/terminal/run'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -147,7 +160,7 @@ export const dsrApi = {
   list: (params?: Record<string, any>) => api.get('/dsr', { params }),
   update: (id: string, data: { statusComments?: string; nextSteps?: string }) => api.patch(`/dsr/${id}`, data),
   runReview: (): Promise<Response> =>
-    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/dsr/run-review`, {
+    fetch(apiUrl('/api/dsr/run-review'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -156,12 +169,7 @@ export const dsrApi = {
 
 export const calendarApi = {
   status: () => api.get('/calendar/status'),
-  connect: (returnTo?: string) => {
-    const url = new URL(`${window.location.protocol}//${window.location.hostname}:3001/api/calendar/oauth/connect`);
-    if (returnTo) url.searchParams.set('returnTo', returnTo);
-    window.location.href = url.toString();
-  },
-  disconnect: () => api.delete('/calendar/disconnect'),
+  // v2: MCP-based calendar — no OAuth connect/disconnect needed
   events: (params?: Record<string, any>) => api.get('/calendar/events', { params }),
 };
 
