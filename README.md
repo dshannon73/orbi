@@ -67,14 +67,8 @@ AI-powered SE Command Center that automates quarterly "App Rigor" admin — logg
 ## Setup
 
 ```bash
-# Get source via Heroku CLI (no GitHub needed)
-heroku git:clone -a orbi-v2 orbi && cd orbi
-
-# For v2 (MCP calendar):
-git checkout v2-mcp-calendar
-
-# For v1 (OAuth calendar):
-# stay on main branch
+# Clone
+git clone https://github.com/dshannon73/orbi.git && cd orbi
 
 # Install all dependencies
 npm install

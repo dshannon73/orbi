@@ -474,13 +474,15 @@
     <div class="step">
       <span class="step-number">1</span>
       <h4>Get the Source</h4>
-      <p>Download the source from Heroku using the CLI, or copy via git:</p>
-      <pre><code><span class="cmt"># Option A — Heroku CLI (recommended)</span>
-heroku git:clone -a orbi-v2 orbi && cd orbi
+      <p>Clone from GitHub: <a href="https://github.com/dshannon73/orbi" target="_blank">github.com/dshannon73/orbi</a></p>
+      <pre><code><span class="cmt"># Clone the repo</span>
+git clone https://github.com/dshannon73/orbi.git && cd orbi
+
+<span class="cmt"># v2 — MCP calendar (recommended, no GCP project needed)</span>
 git checkout v2-mcp-calendar
 
-<span class="cmt"># Option B — if you have git access to the repo</span>
-git clone &lt;repo-url&gt; orbi && cd orbi</code></pre>
+<span class="cmt"># v1 — Google OAuth calendar</span>
+<span class="cmt"># stay on main</span></code></pre>
       <pre><code><span class="cmt"># Install all dependencies</span>
 npm install
 <span class="kw">cd</span> server && npm install && cd ..
