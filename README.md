@@ -2,13 +2,27 @@
 
 AI-powered SE Command Center that automates quarterly "App Rigor" admin — logging activities, filing Deal Contributions, and drafting DSR status updates — by connecting Google Calendar, Salesforce org62, Slack, and Gmail into a single intelligent workflow. Built entirely with Claude Code (Anthropic's CLI agent) for the Salesforce Vibe Coding Competition 2026.
 
+**Live:**
+- **Deck**: https://orbi-deck-66e67b8b9735.herokuapp.com
+- **Docs**: https://orbi-deck-66e67b8b9735.herokuapp.com/docs
+- **v2 app (MCP calendar)**: https://orbi-v2-33a2c3f213ef.herokuapp.com
+
+## Versions
+
+| | v1 (main) | v2 (v2-mcp-calendar branch) |
+|---|---|---|
+| Calendar | Google OAuth (requires GCP project) | Google Calendar MCP via aisuite |
+| Server port (local) | 3001 | 3002 |
+| Client port (local) | 5173 | 5174 |
+
 ## Prerequisites
 
-- **Node.js 18+**
+- **Node.js 20+**
 - **Salesforce CLI** (`sf`) — authenticated against org62
-- **Google Cloud project** — OAuth 2.0 credentials with Calendar (read) scope
+- **Claude Code CLI** — installed and authenticated (for terminal, DSR, and v2 calendar)
+- **v1 only**: Google Cloud project — OAuth 2.0 credentials with Calendar (read) scope
+- **v2 only**: aisuite MCP adaptor with google-workspace configured
 - **Slack workspace** — Bot token with channels:read, chat:write, canvas permissions
-- **Claude Code CLI** — installed at `~/.local/bin/claude` (for terminal and DSR features)
 
 ## Architecture
 
@@ -53,8 +67,14 @@ AI-powered SE Command Center that automates quarterly "App Rigor" admin — logg
 ## Setup
 
 ```bash
-# Clone
-git clone <repo-url> && cd orbi
+# Get source via Heroku CLI (no GitHub needed)
+heroku git:clone -a orbi-v2 orbi && cd orbi
+
+# For v2 (MCP calendar):
+git checkout v2-mcp-calendar
+
+# For v1 (OAuth calendar):
+# stay on main branch
 
 # Install all dependencies
 npm install

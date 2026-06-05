@@ -463,14 +463,28 @@
   <div class="container">
     <h2>Step-by-Step Setup</h2>
 
+    <div style="background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:16px 20px;margin-bottom:28px;">
+      <strong style="color:#f59e0b;">Two versions available:</strong>
+      <ul style="margin-top:8px;padding-left:20px;color:#9ca3af;font-size:14px;line-height:2;">
+        <li><strong style="color:#e2e8f0;">v1</strong> — Google OAuth calendar · ports 3001/5173 · <a href="https://orbi-deck-66e67b8b9735.herokuapp.com">orbi-deck-66e67b8b9735.herokuapp.com</a></li>
+        <li><strong style="color:#e2e8f0;">v2</strong> — Google Calendar MCP (no GCP project needed) · ports 3002/5174 · <a href="https://orbi-v2-33a2c3f213ef.herokuapp.com">orbi-v2-33a2c3f213ef.herokuapp.com</a></li>
+      </ul>
+    </div>
+
     <div class="step">
       <span class="step-number">1</span>
-      <h4>Clone and Install</h4>
-      <pre><code>git clone https://github.com/your-org/orbi.git
-<span class="kw">cd</span> orbi
+      <h4>Get the Source</h4>
+      <p>Download the source from Heroku using the CLI, or copy via git:</p>
+      <pre><code><span class="cmt"># Option A — Heroku CLI (recommended)</span>
+heroku git:clone -a orbi-v2 orbi && cd orbi
+git checkout v2-mcp-calendar
+
+<span class="cmt"># Option B — if you have git access to the repo</span>
+git clone &lt;repo-url&gt; orbi && cd orbi</code></pre>
+      <pre><code><span class="cmt"># Install all dependencies</span>
 npm install
-<span class="kw">cd</span> server && npm install
-<span class="kw">cd</span> ../client && npm install</code></pre>
+<span class="kw">cd</span> server && npm install && cd ..
+<span class="kw">cd</span> client && npm install && cd ..</code></pre>
     </div>
 
     <div class="step">
@@ -478,35 +492,48 @@ npm install
       <h4>Salesforce CLI Auth</h4>
       <p>Authenticate against your org62 instance:</p>
       <pre><code>sf org login web --alias org62 --instance-url https://org62.my.salesforce.com</code></pre>
-      <p>The server reads the SF CLI session file directly via <code>sf org display --target-org org62 --json</code> — no manual token management needed. It auto-refreshes on each request.</p>
+      <p>The server reads the SF CLI session file directly via <code>sf org display --target-org org62 --json</code> — no manual token management. It auto-refreshes on each request.</p>
     </div>
 
     <div class="step">
       <span class="step-number">3</span>
-      <h4>Google OAuth Setup</h4>
-      <p>Create a Google Cloud project with the Calendar API enabled. Configure an OAuth 2.0 consent screen and create Web Application credentials.</p>
-      <pre><code><span class="cmt"># In server/.env</span>
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-secret
+      <h4>Calendar Setup — pick v1 or v2</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">
+        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;">v1 — Google OAuth</div>
+          <p style="font-size:13px;color:#9ca3af;margin-bottom:10px;">Requires a GCP project with Calendar API enabled.</p>
+          <pre style="font-size:12px;"><code><span class="cmt"># server/.env</span>
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=http://localhost:3001/api/calendar/oauth/callback</code></pre>
-      <p>Users connect via the in-app flow: the server redirects to Google consent, receives the callback, and stores tokens in the session.</p>
+        </div>
+        <div style="background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#10b981;margin-bottom:10px;">v2 — MCP (recommended)</div>
+          <p style="font-size:13px;color:#9ca3af;margin-bottom:10px;">No GCP project needed. Requires <a href="https://aisuite.internal.salesforce.com" style="color:#10b981;">aisuite</a> + google-workspace MCP authenticated.</p>
+          <pre style="font-size:12px;"><code><span class="cmt"># No Google env vars needed.</span>
+<span class="cmt"># Ensure Claude CLI is installed:</span>
+which claude  <span class="cmt"># should resolve</span>
+<span class="cmt"># Ensure google-workspace MCP works:</span>
+claude -p "list my calendar events today"</code></pre>
+        </div>
+      </div>
     </div>
 
     <div class="step">
       <span class="step-number">4</span>
       <h4>Slack Integration</h4>
-      <p>Create a Slack app with <code>channels:read</code>, <code>chat:write</code>, and canvas permissions. Add the tokens to your env:</p>
-      <pre><code><span class="cmt"># In server/.env</span>
+      <p>Create a Slack app with <code>channels:read</code>, <code>chat:write</code>, and canvas permissions:</p>
+      <pre><code><span class="cmt"># server/.env</span>
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 SLACK_SIGNING_SECRET=your-signing-secret</code></pre>
-      <p>For the embedded terminal's Slack search capabilities, configure the aisuite MCP adaptor separately.</p>
+      <p>For Slack MCP search in the embedded terminal, configure the aisuite MCP adaptor separately.</p>
     </div>
 
     <div class="step">
       <span class="step-number">5</span>
       <h4>Environment Variables</h4>
-      <p>Full <code>server/.env</code> template:</p>
-      <pre><code><span class="cmt"># Salesforce (fallback if CLI unavailable)</span>
+      <p>Full <code>server/.env</code> template (v2 — MCP calendar):</p>
+      <pre><code><span class="cmt"># Salesforce (SF CLI auth is primary; these are fallback)</span>
 SF_INSTANCE_URL=https://org62.my.salesforce.com
 SF_ACCESS_TOKEN=
 
@@ -514,29 +541,30 @@ SF_ACCESS_TOKEN=
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 
-<span class="cmt"># Google Calendar OAuth</span>
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3001/api/calendar/oauth/callback
-
-<span class="cmt"># LLM Gateway (for AI classification)</span>
+<span class="cmt"># LLM Gateway (Salesforce internal — for AI classification)</span>
 ENG_AI_MODEL_GW_KEY=...
 
 <span class="cmt"># Session</span>
 SESSION_SECRET=a-random-secret-string
-PORT=3001</code></pre>
+
+<span class="cmt"># v2 ports (v1 uses 3001)</span>
+PORT=3002</code></pre>
     </div>
 
     <div class="step">
       <span class="step-number">6</span>
       <h4>Run Dev Server</h4>
-      <pre><code><span class="cmt"># From project root — starts both server and client</span>
+      <pre><code><span class="cmt"># From project root — starts both server and client concurrently</span>
 npm run dev
 
-<span class="cmt"># Or individually:</span>
+<span class="cmt"># v1 (main branch)</span>
 npm run dev:server  <span class="cmt"># Express on :3001</span>
-npm run dev:client  <span class="cmt"># Vite on :5173</span></code></pre>
-      <p>Open <code>http://localhost:5173</code> and log in. The app authenticates via the SF CLI token for your org62 alias.</p>
+npm run dev:client  <span class="cmt"># Vite on :5173  →  http://localhost:5173</span>
+
+<span class="cmt"># v2 (v2-mcp-calendar branch)</span>
+npm run dev:server  <span class="cmt"># Express on :3002</span>
+npm run dev:client  <span class="cmt"># Vite on :5174  →  http://localhost:5174</span></code></pre>
+      <p>Log in with your SF CLI token for the org62 alias. Calendar and briefing work immediately — no OAuth flow needed in v2.</p>
     </div>
   </div>
 </section>
