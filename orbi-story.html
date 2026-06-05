@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How I Built Orbi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         #080710;
+    --bg-2:       #0e0d1a;
+    --bg-3:       #13122a;
+    --surface:    #1a1830;
+    --surface-2:  #221f3d;
+    --border:     rgba(245,158,11,0.12);
+    --border-dim: rgba(255,255,255,0.06);
+    --amber:      #f59e0b;
+    --amber-dim:  #b97b08;
+    --amber-glow: rgba(245,158,11,0.15);
+    --text:       #e8e6f0;
+    --text-dim:   #7a7898;
+    --text-faint: #3a3858;
+    --purple:     #6c63ff;
+    --purple-dim: rgba(108,99,255,0.15);
+    --font-display: 'Syne', sans-serif;
+    --font-mono:    'DM Mono', monospace;
+    --font-body:    'DM Sans', sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ─── NOISE OVERLAY ─── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* ─── SCROLL ANIMATIONS ─── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+  .reveal-delay-1 { transition-delay: 0.1s; }
+  .reveal-delay-2 { transition-delay: 0.2s; }
+  .reveal-delay-3 { transition-delay: 0.3s; }
+  .reveal-delay-4 { transition-delay: 0.4s; }
+  .reveal-delay-5 { transition-delay: 0.5s; }
+
+  /* ─── NAV ─── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 3rem;
+    height: 60px;
+    background: rgba(8,7,16,0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-dim);
+  }
+  .nav-logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: #fff;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .nav-logo span {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+  .nav-links a {
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--amber); }
+
+  /* ─── SECTIONS ─── */
+  section { position: relative; }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* ─── HERO ─── */
+  #hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding-top: 60px;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 60% 40%, rgba(245,158,11,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 80% at 20% 80%, rgba(108,99,255,0.08) 0%, transparent 60%);
+  }
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black, transparent);
+  }
+  .hero-inner {
+    position: relative;
+    z-index: 1;
+    padding: 6rem 0;
+  }
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--amber);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  .hero-eyebrow::before {
+    content: '';
+    display: block;
+    width: 24px;
+    height: 1px;
+    background: var(--amber);
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(3rem, 8vw, 6.5rem);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    color: #fff;
+    margin-bottom: 1.5rem;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--amber);
+    position: relative;
+  }
+  .hero-sub {
+    font-size: 1.15rem;
+    color: var(--text-dim);
+    max-width: 520px;
+    line-height: 1.7;
+    font-weight: 300;
+    margin-bottom: 2.5rem;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .hero-stat {
+    display: flex;
+    flex-direction: column;
+  }
+  .hero-stat-n {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--amber);
+    line-height: 1;
+  }
+  .hero-stat-l {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .hero-divider { width: 1px; background: var(--border-dim); }
+
+  /* ─── SECTION HEADERS ─── */
+  .section-wrap {
+    padding: 7rem 0;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label::before {
+    content: '';
+    display: block;
+    width: 18px;
+    height: 1px;
+    background: var(--amber);
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #fff;
+    line-height: 1.05;
+    margin-bottom: 1rem;
+  }
+  .section-desc {
+    font-size: 1rem;
+    color: var(--text-dim);
+    max-width: 560px;
+    font-weight: 300;
+    line-height: 1.75;
+  }
+
+  /* ─── PROBLEM ─── */
+  #problem { background: var(--bg-2); }
+  .problem-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    margin-top: 3.5rem;
+    align-items: start;
+  }
+  .pain-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .pain-item {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1.1rem 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    transition: border-color 0.2s;
+  }
+  .pain-item:hover { border-color: var(--border); }
+  .pain-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255,80,80,0.1);
+    border: 1px solid rgba(255,80,80,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .pain-text { font-size: 0.9rem; color: var(--text-dim); line-height: 1.5; }
+  .pain-text strong { color: var(--text); display: block; font-size: 0.92rem; margin-bottom: 2px; }
+  .solution-card {
+    background: linear-gradient(135deg, var(--surface), var(--bg-3));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .solution-card::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: var(--amber-glow);
+    border-radius: 50%;
+    filter: blur(40px);
+  }
+  .solution-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.75rem;
+  }
+  .solution-card p { font-size: 0.9rem; color: var(--text-dim); line-height: 1.7; }
+  .solution-badge {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 6px 14px;
+    background: var(--amber-glow);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--amber);
+    letter-spacing: 0.06em;
+  }
+
+  /* ─── STACK ─── */
+  #stack { background: var(--bg); }
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+    margin-top: 3rem;
+  }
+  .stack-card {
+    background: var(--surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: border-color 0.25s, transform 0.25s, background 0.25s;
+    cursor: default;
+  }
+  .stack-card:hover {
+    border-color: var(--border);
+    background: var(--surface-2);
+    transform: translateY(-3px);
+  }
+  .stack-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+  .stack-card h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.4rem;
+  }
+  .stack-card p { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; }
+  .stack-tag {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    padding: 3px 9px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-faint);
+    letter-spacing: 0.05em;
+  }
+
+  /* ─── ARCHITECTURE ─── */
+  #architecture { background: var(--bg-2); }
+  .arch-diagram {
+    margin-top: 3.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 2rem 0;
+  }
+  .arch-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+  .arch-box {
+    padding: 0.9rem 1.4rem;
+    border-radius: 10px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .arch-box-primary {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .arch-box-accent {
+    background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.05));
+    border: 1px solid rgba(245,158,11,0.3);
+  }
+  .arch-box-dim {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-dim);
+    min-width: 100px;
+    padding: 0.7rem 1rem;
+  }
+  .arch-box-label {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .arch-box-sub {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    margin-top: 2px;
+    letter-spacing: 0.05em;
+  }
+  .arch-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    flex-shrink: 0;
+  }
+  .arch-arrow svg { color: var(--amber); }
+  .arch-split {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex-shrink: 0;
+  }
+  .arch-split-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 0.25rem;
+  }
+
+  /* ─── FEATURES ─── */
+  #features { background: var(--bg); }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.25rem;
+    margin-top: 3rem;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s, transform 0.25s;
+  }
+  .feature-card:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+  }
+  .feature-card.featured {
+    border-color: rgba(245,158,11,0.25);
+    background: linear-gradient(135deg, var(--surface), rgba(245,158,11,0.04));
+  }
+  .feature-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: transparent;
+    transition: background 0.25s;
+  }
+  .feature-card:hover::after { background: linear-gradient(90deg, transparent, var(--amber), transparent); }
+  .feature-card.featured::after { background: linear-gradient(90deg, transparent, var(--amber), transparent); }
+  .feature-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.9rem;
+    display: block;
+  }
+  .feature-card h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.4rem;
+  }
+  .feature-card p { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; }
+
+  /* ─── TIMELINE ─── */
+  #journey { background: var(--bg-2); }
+  .timeline {
+    margin-top: 3.5rem;
+    position: relative;
+    padding-left: 2.5rem;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px; top: 0; bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--border), var(--amber-dim), var(--border), transparent);
+  }
+  .timeline-item {
+    position: relative;
+    padding-bottom: 2.5rem;
+  }
+  .timeline-item:last-child { padding-bottom: 0; }
+  .timeline-dot {
+    position: absolute;
+    left: -2.5rem;
+    top: 4px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--border-dim);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .timeline-item:hover .timeline-dot {
+    border-color: var(--amber);
+    background: var(--amber-glow);
+  }
+  .timeline-item.current .timeline-dot {
+    border-color: var(--amber);
+    background: var(--amber);
+    box-shadow: 0 0 12px var(--amber-glow);
+  }
+  .timeline-tag {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--amber);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+  .timeline-item h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.4rem;
+  }
+  .timeline-item p { font-size: 0.88rem; color: var(--text-dim); line-height: 1.6; max-width: 560px; }
+  .timeline-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0.75rem;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-dim);
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── LEARNINGS ─── */
+  #learnings { background: var(--bg); }
+  .learnings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+  .learning-card {
+    padding: 2rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-dim);
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .learning-card:hover { border-color: var(--border); }
+  .learning-num {
+    font-family: var(--font-display);
+    font-size: 4rem;
+    font-weight: 800;
+    color: rgba(245,158,11,0.08);
+    line-height: 1;
+    position: absolute;
+    top: 1rem; right: 1.5rem;
+    letter-spacing: -0.05em;
+  }
+  .learning-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.6rem;
+    position: relative;
+  }
+  .learning-card p {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    line-height: 1.65;
+    position: relative;
+  }
+
+  /* ─── FOOTER ─── */
+  footer {
+    background: var(--bg-2);
+    border-top: 1px solid var(--border-dim);
+    padding: 2.5rem 0;
+    text-align: center;
+  }
+  footer p {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
+  }
+  footer strong { color: var(--amber); font-weight: 500; }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 768px) {
+    nav { padding: 0 1.25rem; }
+    .nav-links { display: none; }
+    h1 { font-size: 2.8rem; }
+    .problem-grid { grid-template-columns: 1fr; }
+    .stack-grid { grid-template-columns: 1fr 1fr; }
+    .learnings-grid { grid-template-columns: 1fr; }
+    .arch-diagram { justify-content: flex-start; }
+    .section-wrap { padding: 4.5rem 0; }
+    .container { padding: 0 1.25rem; }
+  }
+  @media (max-width: 480px) {
+    .stack-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Orbi <span>SE</span></div>
+  <ul class="nav-links">
+    <li><a href="#problem">Problem</a></li>
+    <li><a href="#stack">Stack</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#journey">Journey</a></li>
+    <li><a href="#learnings">Learnings</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="container">
+    <div class="hero-inner">
+      <div class="hero-eyebrow reveal">A Build Story</div>
+      <h1 class="reveal reveal-delay-1">How I<br>Built <em>Orbi</em></h1>
+      <p class="hero-sub reveal reveal-delay-2">
+        A personal SE command center — unified Salesforce data, AI assistance, Slack, and calendar in one dark-mode hub built with Node, React, and TypeScript.
+      </p>
+      <div class="hero-meta reveal reveal-delay-3">
+        <div class="hero-stat">
+          <span class="hero-stat-n">12</span>
+          <span class="hero-stat-l">API routes</span>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <span class="hero-stat-n">10</span>
+          <span class="hero-stat-l">Pages</span>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <span class="hero-stat-n">4</span>
+          <span class="hero-stat-l">Integrations</span>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <span class="hero-stat-n">1</span>
+          <span class="hero-stat-l">Dev</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">01 — The Problem</div>
+      <h2 class="reveal reveal-delay-1">Data everywhere.<br>Insight nowhere.</h2>
+      <p class="section-desc reveal reveal-delay-2">
+        As an SE, your data lives in six different tabs. You context-switch constantly just to answer basic questions about your own pipeline.
+      </p>
+      <div class="problem-grid">
+        <ul class="pain-list">
+          <li class="pain-item reveal reveal-delay-1">
+            <div class="pain-icon">🏢</div>
+            <div class="pain-text">
+              <strong>Salesforce org62</strong>
+              Activities, opportunities, accounts — all locked inside SF. No quick glance.
+            </div>
+          </li>
+          <li class="pain-item reveal reveal-delay-2">
+            <div class="pain-icon">💬</div>
+            <div class="pain-text">
+              <strong>Slack overload</strong>
+              Deal updates, customer pings, team threads — impossible to triage from within SF.
+            </div>
+          </li>
+          <li class="pain-item reveal reveal-delay-3">
+            <div class="pain-icon">📅</div>
+            <div class="pain-text">
+              <strong>Calendar blindness</strong>
+              No native view linking calendar events to accounts or opportunities.
+            </div>
+          </li>
+          <li class="pain-item reveal reveal-delay-4">
+            <div class="pain-icon">✈️</div>
+            <div class="pain-text">
+              <strong>Travel approvals</strong>
+              Scattered approval requests with no unified status view.
+            </div>
+          </li>
+        </ul>
+        <div class="solution-card reveal reveal-delay-2">
+          <h3>One hub. All signal.</h3>
+          <p>
+            Orbi pulls everything into a single dark-mode interface. Your pipeline, activities, deal contributions, travel requests, calendar, and an AI assistant — all in one place, all authenticated through a single session.
+          </p>
+          <p style="margin-top: 1rem;">
+            Built specifically for the way SEs actually work: account-centric, deal-focused, always context-switching.
+          </p>
+          <div class="solution-badge">→ orbi / se command center</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section id="stack">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">02 — The Stack</div>
+      <h2 class="reveal reveal-delay-1">Boring stack.<br>Interesting product.</h2>
+      <p class="section-desc reveal reveal-delay-2">
+        Deliberate choices. TypeScript end-to-end for confidence, Vite for speed, Express for simplicity.
+      </p>
+      <div class="stack-grid">
+        <div class="stack-card reveal reveal-delay-1">
+          <div class="stack-icon" style="background: rgba(104,184,104,0.1); border: 1px solid rgba(104,184,104,0.2);">🟢</div>
+          <h3>Node.js + Express</h3>
+          <p>Minimal, fast API server. Session-based auth with express-session and FileStore — no DB required.</p>
+          <span class="stack-tag">backend</span>
+        </div>
+        <div class="stack-card reveal reveal-delay-2">
+          <div class="stack-icon" style="background: rgba(97,218,251,0.1); border: 1px solid rgba(97,218,251,0.2);">⚛️</div>
+          <h3>React + Vite</h3>
+          <p>React Router for client-side nav, Zustand for state, Vite for sub-second HMR during development.</p>
+          <span class="stack-tag">frontend</span>
+        </div>
+        <div class="stack-card reveal reveal-delay-3">
+          <div class="stack-icon" style="background: rgba(49,120,198,0.1); border: 1px solid rgba(49,120,198,0.2);">🔷</div>
+          <h3>TypeScript</h3>
+          <p>Full-stack TypeScript. Shared type confidence across the Express routes and React pages.</p>
+          <span class="stack-tag">language</span>
+        </div>
+        <div class="stack-card reveal reveal-delay-1">
+          <div class="stack-icon" style="background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.2);">🌊</div>
+          <h3>Tailwind CSS</h3>
+          <p>Utility-first styling with custom CSS variables for the dark purple + amber design system.</p>
+          <span class="stack-tag">styling</span>
+        </div>
+        <div class="stack-card reveal reveal-delay-2">
+          <div class="stack-icon" style="background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2);">✨</div>
+          <h3>Claude AI</h3>
+          <p>Anthropic's Claude powers the Orbi Agent — a conversational assistant with access to your live SF data.</p>
+          <span class="stack-tag">ai</span>
+        </div>
+        <div class="stack-card reveal reveal-delay-3">
+          <div class="stack-icon" style="background: rgba(108,99,255,0.1); border: 1px solid rgba(108,99,255,0.2);">🔗</div>
+          <h3>Salesforce API</h3>
+          <p>Custom SF client hitting org62. OAuth session-based auth proxied through Express — no SF SDK overhead.</p>
+          <span class="stack-tag">integration</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">03 — Architecture</div>
+      <h2 class="reveal reveal-delay-1">Simple by design.</h2>
+      <p class="section-desc reveal reveal-delay-2">
+        A thin proxy pattern. React talks to Express; Express talks to the world. No micro-services, no complexity.
+      </p>
+      <div class="arch-diagram reveal reveal-delay-2">
+        <!-- Browser -->
+        <div class="arch-node">
+          <div class="arch-box arch-box-primary">
+            <div class="arch-box-label">Browser</div>
+            <div class="arch-box-sub">React + Vite</div>
+          </div>
+        </div>
+        <!-- Arrow -->
+        <div class="arch-arrow">
+          <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+            <line x1="0" y1="8" x2="28" y2="8" stroke="currentColor" stroke-width="1.5"/>
+            <polyline points="22,3 32,8 22,13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <!-- Express -->
+        <div class="arch-node">
+          <div class="arch-box arch-box-accent">
+            <div class="arch-box-label">Express API</div>
+            <div class="arch-box-sub">:3001 / TypeScript</div>
+          </div>
+        </div>
+        <!-- Arrow -->
+        <div class="arch-arrow">
+          <svg width="36" height="16" viewBox="0 0 36 16" fill="none">
+            <line x1="0" y1="8" x2="28" y2="8" stroke="currentColor" stroke-width="1.5"/>
+            <polyline points="22,3 32,8 22,13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <!-- Split targets -->
+        <div>
+          <div class="arch-split-label">Integrations</div>
+          <div class="arch-split">
+            <div class="arch-box arch-box-dim"><div class="arch-box-label" style="font-size:0.78rem;">Salesforce</div><div class="arch-box-sub">org62</div></div>
+            <div class="arch-box arch-box-dim"><div class="arch-box-label" style="font-size:0.78rem;">Claude AI</div><div class="arch-box-sub">anthropic</div></div>
+            <div class="arch-box arch-box-dim"><div class="arch-box-label" style="font-size:0.78rem;">Slack</div><div class="arch-box-sub">bolt sdk</div></div>
+            <div class="arch-box arch-box-dim"><div class="arch-box-label" style="font-size:0.78rem;">Google Cal</div><div class="arch-box-sub">workspace</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">04 — Features</div>
+      <h2 class="reveal reveal-delay-1">Everything an SE needs.<br>Nothing they don't.</h2>
+      <p class="section-desc reveal reveal-delay-2">Ten pages, each purpose-built for a specific SE workflow.</p>
+      <div class="features-grid">
+        <div class="feature-card featured reveal reveal-delay-1">
+          <span class="feature-icon">✨</span>
+          <h3>Orbi Agent</h3>
+          <p>AI assistant powered by Claude. Ask questions about your pipeline, accounts, and activities in natural language.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <span class="feature-icon">📊</span>
+          <h3>Dashboard</h3>
+          <p>At-a-glance pipeline summary. Key metrics, recent activities, and open opportunities.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-3">
+          <span class="feature-icon">✅</span>
+          <h3>Activities</h3>
+          <p>Full activity log from org62 — calls, emails, tasks — filterable by role and date.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <span class="feature-icon">💼</span>
+          <h3>Deal Contributions</h3>
+          <p>Track your contribution across deals. Know exactly where you're adding value.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <span class="feature-icon">📈</span>
+          <h3>Opportunities</h3>
+          <p>Live pipeline from Salesforce. Stage, amount, close date — all in one view.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-3">
+          <span class="feature-icon">✈️</span>
+          <h3>Travel Approvals</h3>
+          <p>Submit and track travel requests. No more digging through email threads.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <span class="feature-icon">📅</span>
+          <h3>Calendar</h3>
+          <p>Google Calendar integration — see your week alongside your pipeline context.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <span class="feature-icon">🏢</span>
+          <h3>Accounts</h3>
+          <p>Account list from org62 with quick access to key account details.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- JOURNEY -->
+<section id="journey">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">05 — Build Journey</div>
+      <h2 class="reveal reveal-delay-1">How it evolved.</h2>
+      <p class="section-desc reveal reveal-delay-2">Started with a simple name and a data problem. Ended with a full SE platform.</p>
+      <div class="timeline">
+        <div class="timeline-item reveal reveal-delay-1">
+          <div class="timeline-dot"></div>
+          <div class="timeline-tag">Chapter 01</div>
+          <h3>Born as org62-app</h3>
+          <p>Started with a single question: why is it so hard to see my own Salesforce data? Built a bare Express + React shell to proxy org62 API calls.</p>
+          <div class="timeline-chips">
+            <span class="chip">express</span>
+            <span class="chip">react</span>
+            <span class="chip">org62 api</span>
+          </div>
+        </div>
+        <div class="timeline-item reveal reveal-delay-2">
+          <div class="timeline-dot"></div>
+          <div class="timeline-tag">Chapter 02</div>
+          <h3>Auth + persistent sessions</h3>
+          <p>Added express-session with FileStore for year-long sessions. No DB, no OAuth complexity — just a session file and a Salesforce token.</p>
+          <div class="timeline-chips">
+            <span class="chip">express-session</span>
+            <span class="chip">session-file-store</span>
+            <span class="chip">sf auth</span>
+          </div>
+        </div>
+        <div class="timeline-item reveal reveal-delay-3">
+          <div class="timeline-dot"></div>
+          <div class="timeline-tag">Chapter 03</div>
+          <h3>All 12 routes built out</h3>
+          <p>Systematically built every route — activities, opportunities, deal contributions, accounts, users, travel approvals, calendar, slack, meta, dashboard. Each one a clean TypeScript module.</p>
+          <div class="timeline-chips">
+            <span class="chip">12 routes</span>
+            <span class="chip">typescript</span>
+            <span class="chip">slack bolt</span>
+            <span class="chip">google calendar</span>
+          </div>
+        </div>
+        <div class="timeline-item reveal reveal-delay-4">
+          <div class="timeline-dot"></div>
+          <div class="timeline-tag">Chapter 04</div>
+          <h3>Orbi Agent — AI assistant</h3>
+          <p>Integrated Claude AI as a conversational assistant with live access to your SF data. Ask about your pipeline in plain English and get grounded answers.</p>
+          <div class="timeline-chips">
+            <span class="chip">claude ai</span>
+            <span class="chip">anthropic sdk</span>
+            <span class="chip">tool use</span>
+          </div>
+        </div>
+        <div class="timeline-item current reveal reveal-delay-5">
+          <div class="timeline-dot"></div>
+          <div class="timeline-tag">Chapter 05 — Now</div>
+          <h3>org62-app → Orbi</h3>
+          <p>Renamed the project to Orbi. A proper product name for something that had grown well beyond a quick script. The SE command center.</p>
+          <div class="timeline-chips">
+            <span class="chip">orbi</span>
+            <span class="chip">se command center</span>
+            <span class="chip">10 pages</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LEARNINGS -->
+<section id="learnings">
+  <div class="section-wrap">
+    <div class="container">
+      <div class="section-label reveal">06 — What I Learned</div>
+      <h2 class="reveal reveal-delay-1">The real lessons.</h2>
+      <p class="section-desc reveal reveal-delay-2">Building a tool you actually use every day sharpens your instincts fast.</p>
+      <div class="learnings-grid">
+        <div class="learning-card reveal reveal-delay-1">
+          <div class="learning-num">01</div>
+          <h3>The proxy pattern scales surprisingly well</h3>
+          <p>Keeping Express as a thin proxy — no ORM, no database, no abstraction layer — meant every route was fast to build and easy to debug. Simplicity is a feature.</p>
+        </div>
+        <div class="learning-card reveal reveal-delay-2">
+          <div class="learning-num">02</div>
+          <h3>Session files beat databases for personal tools</h3>
+          <p>express-session with FileStore meant zero infrastructure. One year TTL, one JSON file per session. For a single-user app, it's the right call every time.</p>
+        </div>
+        <div class="learning-card reveal reveal-delay-3">
+          <div class="learning-num">03</div>
+          <h3>AI assistants need grounded data to be useful</h3>
+          <p>A generic LLM can't help with your pipeline. Wiring Claude to live SF data via tool use transforms it from a chatbot into an actual work assistant.</p>
+        </div>
+        <div class="learning-card reveal reveal-delay-4">
+          <div class="learning-num">04</div>
+          <h3>Name things properly — it changes how you build</h3>
+          <p>Calling it "org62-app" kept it feeling like a script. The moment it became "Orbi" the bar for quality went up. Names set intent.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <p>Built by <strong>Dan Shannon</strong> · Orbi SE Command Center · <strong>Node + React + TypeScript + Claude</strong></p>
+  </div>
+</footer>
+
+<script>
+  // Reveal on scroll
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Hero reveals immediately
+  document.querySelectorAll('#hero .reveal').forEach((el, i) => {
+    setTimeout(() => el.classList.add('visible'), 100 + i * 120);
+  });
+</script>
+</body>
+</html>

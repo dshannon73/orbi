@@ -62,6 +62,7 @@ export interface DCGap {
   totalHours: number;
   dcReasons: string[];
   splitReason: string;
+  isHistoricallyEngaged?: boolean;
 }
 
 export interface AccountGroup {
@@ -107,6 +108,12 @@ export interface BriefingResult {
   };
 }
 
+export interface ProgressEntry {
+  step: string;
+  message: string;
+  debug?: boolean;
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 interface AssistantState {
@@ -119,9 +126,11 @@ interface AssistantState {
   setRoleFilter: (v: string) => void;
 
   // Briefing result (persisted)
-  briefingStatus: 'idle' | 'done' | 'error';
+  briefingStatus: 'idle' | 'loading' | 'done' | 'error';
+  briefingError: string;
   briefingResult: BriefingResult | null;
-  resultTab: 'activities' | 'dcs' | 'unmatched';
+  progressLog: ProgressEntry[];
+  resultTab: 'activities' | 'dcs' | 'unmatched' | 'chat';
 
   // Selections stored as arrays for JSON serializability
   selectedEvents: string[];
@@ -140,9 +149,12 @@ interface AssistantState {
   globalTaskType: string;
 
   // Actions
-  setBriefingStatus: (s: 'idle' | 'done' | 'error') => void;
+  setBriefingStatus: (s: 'idle' | 'loading' | 'done' | 'error') => void;
+  setBriefingError: (e: string) => void;
   setBriefingResult: (r: BriefingResult | null) => void;
-  setResultTab: (t: 'activities' | 'dcs' | 'unmatched') => void;
+  appendProgressLog: (entry: ProgressEntry) => void;
+  clearProgressLog: () => void;
+  setResultTab: (t: 'activities' | 'dcs' | 'unmatched' | 'chat') => void;
   setSelectedEvents: (arr: string[]) => void;
   setSelectedDCs: (arr: string[]) => void;
   setUnmatchedSelected: (arr: string[]) => void;
@@ -160,7 +172,9 @@ interface AssistantState {
 
 const BLANK_BRIEFING = {
   briefingStatus: 'idle' as const,
+  briefingError: '',
   briefingResult: null,
+  progressLog: [],
   resultTab: 'activities' as const,
   selectedEvents: [],
   selectedDCs: [],
@@ -190,7 +204,10 @@ export const useAssistantFilters = create<AssistantState>()(
       // Briefing
       ...BLANK_BRIEFING,
       setBriefingStatus: (briefingStatus) => set({ briefingStatus }),
+      setBriefingError: (briefingError) => set({ briefingError }),
       setBriefingResult: (briefingResult) => set({ briefingResult }),
+      appendProgressLog: (entry) => set(s => ({ progressLog: [...s.progressLog, entry] })),
+      clearProgressLog: () => set({ progressLog: [] }),
       setResultTab: (resultTab) => set({ resultTab }),
       setSelectedEvents: (selectedEvents) => set({ selectedEvents }),
       setSelectedDCs: (selectedDCs) => set({ selectedDCs }),
@@ -207,13 +224,15 @@ export const useAssistantFilters = create<AssistantState>()(
       resetBriefing: () => set(BLANK_BRIEFING),
     }),
     {
-      name: 'orbi-assistant-v3',
+      name: 'orbi-assistant-v4',
       partialize: (s) => ({
         accountScope: s.accountScope,
         calExclude: s.calExclude,
         roleFilter: s.roleFilter,
         briefingStatus: s.briefingStatus,
+        briefingError: s.briefingError,
         briefingResult: s.briefingResult,
+        progressLog: s.progressLog,
         resultTab: s.resultTab,
         selectedEvents: s.selectedEvents,
         selectedDCs: s.selectedDCs,

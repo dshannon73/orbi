@@ -2,7 +2,19 @@ import axios from 'axios';
 import { useFilters } from '@/store/filters';
 import { useAuthStore } from '@/store/auth';
 
-const api = axios.create({ baseURL: 'http://localhost:3001/api', withCredentials: true });
+const api = axios.create({ baseURL: `${window.location.protocol}//${window.location.hostname}:3001/api`, withCredentials: true });
+
+// Redirect to login on any 401 so a lost session doesn't leave the app in a broken state
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err?.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      useAuthStore.getState().setUser(null);
+      window.location.href = '/login';
+    }
+    return Promise.reject(err);
+  },
+);
 
 /** Returns the global filter query params from the store — call inside components */
 export function useGlobalParams() {
@@ -27,7 +39,7 @@ export const activitiesApi = {
   get: (id: string) => api.get(`/activities/${id}`),
   create: (data: any) => api.post('/activities', data),
   update: (id: string, data: any) => api.patch(`/activities/${id}`, data),
-  searchRelated: (params: { oppName?: string; accountName?: string; ownerName?: string; ownerRole?: string }) => api.get('/activities/search-related', { params }),
+  searchRelated: (params: { q?: string; oppName?: string; accountName?: string; ownerName?: string; ownerRole?: string; currentUserId?: string }) => api.get('/activities/search-related', { params }),
   logEvent: (data: any) => api.post('/activities/log-event', data),
   recordTypes: () => api.get('/activities/record-types'),
 };
@@ -68,6 +80,8 @@ export const travelApprovalsApi = {
 
 export const slackApi = {
   send: (channel: string, text: string) => api.post('/slack/send', { channel, text }),
+  postCanvas: (type: 'activities' | 'dcs', params?: Record<string, any>) =>
+    api.post(`/slack/canvas/${type}`, { ...params }),
 };
 
 export const metaApi = {
@@ -83,10 +97,11 @@ export const assistantApi = {
     data: {
       currentUserId: string; dateFrom: string; dateTo: string;
       accountScope?: string; calExclude?: string; roleFilter?: string;
+      lookbackMonths?: number;
     },
     onEvent: (event: { type: string; [k: string]: any }) => void,
   ): Promise<void> =>
-    fetch('http://localhost:3001/api/assistant/briefing', {
+    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/assistant/briefing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -110,13 +125,39 @@ export const assistantApi = {
     }),
   execute: (data: { currentUserId: string; activities?: any[]; dcs?: any[] }) =>
     api.post('/assistant/execute', data),
+  chat: (data: { currentUserId: string; messages: { role: 'user' | 'assistant'; content: string }[]; briefingContext?: any }) =>
+    api.post('/assistant/chat', data),
+  chatExecute: (data: { currentUserId: string; plan: any }) =>
+    api.post('/assistant/chat/execute', data),
 };
 
+
+export const terminalApi = {
+  run: (messages: { role: string; content: string }[], signal?: AbortSignal): Promise<Response> =>
+    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/terminal/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ messages }),
+      signal,
+    }),
+};
+
+export const dsrApi = {
+  list: (params?: Record<string, any>) => api.get('/dsr', { params }),
+  update: (id: string, data: { statusComments?: string; nextSteps?: string }) => api.patch(`/dsr/${id}`, data),
+  runReview: (): Promise<Response> =>
+    fetch(`${window.location.protocol}//${window.location.hostname}:3001/api/dsr/run-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    }),
+};
 
 export const calendarApi = {
   status: () => api.get('/calendar/status'),
   connect: (returnTo?: string) => {
-    const url = new URL('http://localhost:3001/api/calendar/oauth/connect');
+    const url = new URL(`${window.location.protocol}//${window.location.hostname}:3001/api/calendar/oauth/connect`);
     if (returnTo) url.searchParams.set('returnTo', returnTo);
     window.location.href = url.toString();
   },

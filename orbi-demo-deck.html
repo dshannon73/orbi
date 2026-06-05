@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orbi SE — Vibe Coding Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0e0d1a;
+    color: #e2e8f0;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .deck {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .slide.active {
+    display: flex;
+    opacity: 1;
+  }
+
+  /* Nav */
+  .nav {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+  }
+
+  .nav button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e2e8f0;
+    padding: 8px 20px;
+    border-radius: 999px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .nav button:hover { background: rgba(245,158,11,0.2); border-color: #f59e0b; }
+
+  .slide-counter {
+    font-size: 12px;
+    color: #4a4860;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #2a2840;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .dot.active { background: #f59e0b; }
+
+  /* Talk track */
+  .talk-track {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 900px;
+    width: 90%;
+    background: rgba(15,14,26,0.95);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size: 12px;
+    color: #9ca3af;
+    line-height: 1.6;
+    display: none;
+    z-index: 99;
+  }
+
+  .talk-track.visible { display: block; }
+  .talk-track strong { color: #f59e0b; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
+
+  .talk-toggle {
+    position: fixed;
+    bottom: 32px;
+    right: 40px;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.3);
+    color: #f59e0b;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    cursor: pointer;
+    z-index: 101;
+  }
+
+  /* ── Slide styles ── */
+
+  /* Slide 1: Title */
+  .slide-title {
+    background: radial-gradient(ellipse at 30% 50%, rgba(245,158,11,0.07) 0%, transparent 55%),
+                radial-gradient(ellipse at 75% 40%, rgba(0,181,226,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(139,92,246,0.06) 0%, transparent 50%),
+                #0e0d1a;
+    text-align: center;
+  }
+
+  .brand {
+    font-size: 96px;
+    font-weight: 800;
+    letter-spacing: -4px;
+    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .brand-sub {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    color: #4a4860;
+    margin-bottom: 40px;
+  }
+
+  .title-headline {
+    font-size: 22px;
+    color: #e2e8f0;
+    max-width: 640px;
+    line-height: 1.5;
+    margin-bottom: 48px;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 999px;
+    padding: 8px 20px;
+    font-size: 13px;
+    color: #f59e0b;
+  }
+
+  /* Slide 2: Problem */
+  .slide-problem { background: #0e0d1a; }
+
+  .slide-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #f59e0b;
+    margin-bottom: 24px;
+    align-self: flex-start;
+  }
+
+  .problem-headline {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 48px;
+    max-width: 900px;
+    align-self: flex-start;
+  }
+
+  .problem-headline span { color: #f59e0b; }
+
+  .chaos-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .chaos-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+  }
+
+  .chaos-icon { font-size: 28px; margin-bottom: 8px; }
+  .chaos-label { font-size: 11px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .chaos-arrow {
+    font-size: 32px;
+    color: #2a2840;
+    display: flex;
+    align-items: center;
+    padding-top: 8px;
+  }
+
+  /* Slide 3: The Cost */
+  .slide-cost { background: #0e0d1a; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 32px;
+  }
+
+  .stat-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .stat-card.highlight {
+    background: rgba(245,158,11,0.06);
+    border-color: rgba(245,158,11,0.25);
+  }
+
+  .stat-number {
+    font-size: 64px;
+    font-weight: 800;
+    line-height: 1;
+    color: #f59e0b;
+    margin-bottom: 8px;
+  }
+
+  .stat-label { font-size: 14px; color: #6b7280; line-height: 1.5; }
+
+  /* Slide 4: What is Orbi */
+  .slide-what { background: #0e0d1a; }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 32px;
+  }
+
+  .feature-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .feature-icon { font-size: 28px; margin-bottom: 12px; }
+  .feature-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; }
+  .feature-desc { font-size: 13px; color: #6b7280; line-height: 1.6; }
+
+  /* Slide 5: How it works */
+  .slide-how { background: #0e0d1a; }
+
+  .flow-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 40px;
+  }
+
+  .flow-step {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px 20px;
+    text-align: center;
+    position: relative;
+  }
+
+  .flow-step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(245,158,11,0.15);
+    border: 1px solid rgba(245,158,11,0.4);
+    color: #f59e0b;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+  }
+
+  .flow-step-title { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; }
+  .flow-step-desc { font-size: 11px; color: #6b7280; line-height: 1.5; }
+
+  .flow-arrow {
+    color: #2a2840;
+    font-size: 24px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* Slide 6: The Build */
+  .slide-build { background: #0e0d1a; }
+
+  .build-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 32px;
+  }
+
+  .build-card {
+    border-radius: 16px;
+    padding: 28px;
+  }
+
+  .build-card.challenge {
+    background: rgba(239,68,68,0.05);
+    border: 1px solid rgba(239,68,68,0.15);
+  }
+
+  .build-card.lesson {
+    background: rgba(16,185,129,0.05);
+    border: 1px solid rgba(16,185,129,0.15);
+  }
+
+  .build-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .challenge .build-card-title { color: #ef4444; }
+  .lesson .build-card-title { color: #10b981; }
+
+  .build-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+  }
+
+  .build-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  .challenge .build-dot { background: #ef4444; }
+  .lesson .build-dot { background: #10b981; }
+
+  .build-text { font-size: 13px; color: #9ca3af; line-height: 1.6; }
+  .build-text strong { color: #e2e8f0; }
+
+  /* Slide 7: Demo */
+  .slide-demo {
+    background: radial-gradient(ellipse at 50% 40%, rgba(124,58,237,0.08) 0%, transparent 60%), #0e0d1a;
+    text-align: center;
+  }
+
+  .demo-headline {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+
+  .demo-headline span { color: #f59e0b; }
+
+  .demo-sub {
+    font-size: 18px;
+    color: #6b7280;
+    margin-bottom: 48px;
+    max-width: 600px;
+  }
+
+  .demo-stops {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 800px;
+  }
+
+  .demo-stop {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-size: 13px;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .demo-stop-num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(245,158,11,0.2);
+    color: #f59e0b;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Slide 8: Value */
+  .slide-value { background: #0e0d1a; }
+
+  .value-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 32px;
+    align-items: start;
+  }
+
+  .value-before, .value-after {
+    border-radius: 16px;
+    padding: 28px;
+  }
+
+  .value-before {
+    background: rgba(239,68,68,0.04);
+    border: 1px solid rgba(239,68,68,0.12);
+  }
+
+  .value-after {
+    background: rgba(16,185,129,0.04);
+    border: 1px solid rgba(16,185,129,0.15);
+  }
+
+  .value-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .value-before .value-label { color: #ef4444; }
+  .value-after .value-label { color: #10b981; }
+
+  .value-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: #9ca3af;
+    line-height: 1.5;
+    align-items: flex-start;
+  }
+
+  .value-item-dot { margin-top: 6px; flex-shrink: 0; font-size: 10px; }
+  .value-before .value-item-dot { color: #ef4444; }
+  .value-after .value-item-dot { color: #10b981; }
+
+  /* Slide 9: Who is it for */
+  .slide-who {
+    background: radial-gradient(ellipse at 70% 30%, rgba(245,158,11,0.06) 0%, transparent 50%), #0e0d1a;
+  }
+
+  .who-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 32px;
+  }
+
+  .who-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+
+  .who-icon { font-size: 36px; margin-bottom: 12px; }
+  .who-title { font-size: 15px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; }
+  .who-desc { font-size: 12px; color: #6b7280; line-height: 1.6; }
+
+  .who-quote {
+    max-width: 700px;
+    margin-top: 32px;
+    text-align: center;
+    font-size: 18px;
+    color: #6b7280;
+    font-style: italic;
+    line-height: 1.6;
+  }
+
+  .who-quote span { color: #f59e0b; font-style: normal; font-weight: 600; }
+
+  /* Slide 10: Close */
+  .slide-close {
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,181,226,0.08) 0%, transparent 55%),
+                radial-gradient(ellipse at 50% 50%, rgba(245,158,11,0.06) 0%, transparent 65%), #0e0d1a;
+    text-align: center;
+  }
+
+  .close-brand { font-size: 72px; font-weight: 800; letter-spacing: -3px; background: linear-gradient(135deg, #f59e0b, #fbbf24); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1; margin-bottom: 12px; }
+  .close-tagline { font-size: 20px; color: #6b7280; margin-bottom: 48px; }
+
+  .close-pills {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+
+  .close-pill {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 12px;
+    color: #9ca3af;
+  }
+
+  .close-statement {
+    font-size: 28px;
+    font-weight: 700;
+    color: #f1f5f9;
+    max-width: 640px;
+    line-height: 1.4;
+  }
+
+  .close-statement span { color: #f59e0b; }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Slide 1: Title -->
+  <div class="slide slide-title active" id="slide-1">
+    <div style="display:flex; align-items:center; justify-content:center; gap: 60px; width:100%; max-width:1100px;">
+      <!-- Left: text -->
+      <div style="flex:1; text-align:left;">
+        <div class="brand" style="text-align:left;">Orbi</div>
+        <div class="brand-sub" style="text-align:left;">SE Command Center</div>
+        <div class="title-headline" style="text-align:left; margin-bottom:32px;">
+          An AI-powered personal app rigor agent built by Claude for Distinguished SEs — to do the admin work that was eating his calendar.
+        </div>
+        <div class="pill">⚡ Vibe Coding Competition · Built with Claude Code · 2026</div>
+      </div>
+      <!-- Right: Astro -->
+      <div style="flex-shrink:0; position:relative;">
+        <div style="position:absolute; inset:-20px; background:radial-gradient(ellipse at center, rgba(0,181,226,0.2) 0%, rgba(139,92,246,0.08) 50%, transparent 70%); border-radius:50%;"></div>
+        <img src="astromfg.png" alt="Orbi Agent"
+          style="width:320px; height:320px; object-fit:contain; position:relative; z-index:1;
+                 filter: drop-shadow(0 0 40px rgba(0,181,226,0.35)) drop-shadow(0 0 80px rgba(139,92,246,0.15));" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 2: Problem + Cost (combined) -->
+  <div class="slide slide-problem" id="slide-2">
+    <div style="width:100%; max-width:960px;">
+      <div class="slide-label">The Problem</div>
+      <div class="problem-headline" style="font-size:44px; margin-bottom:36px;">Dozens of accounts. 5 systems.<br>App Rigor was a <span>multi-hour ordeal.</span></div>
+
+      <!-- Systems row -->
+      <div style="display:flex; gap:12px; align-items:stretch; margin-bottom:20px;">
+        <div style="flex:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div style="font-size:32px;">📅</div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Google Calendar</div>
+          <div style="font-size:11px; color:#4a4860; text-align:center; line-height:1.5;">What did I work on and who was there?</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div style="font-size:32px;">💬</div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Slack</div>
+          <div style="font-size:11px; color:#4a4860; text-align:center; line-height:1.5;">What did we discuss? Any updates?</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div style="font-size:32px;">☁️</div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Salesforce org62</div>
+          <div style="font-size:11px; color:#4a4860; text-align:center; line-height:1.5;">What's the right opp? Is there a DC?</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div style="font-size:32px;">📧</div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Email</div>
+          <div style="font-size:11px; color:#4a4860; text-align:center; line-height:1.5;">Any follow-ups or action items?</div>
+        </div>
+        <div style="flex:1; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 16px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+          <div style="font-size:32px;">📊</div>
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Reports &amp; Dashboards</div>
+          <div style="font-size:11px; color:#4a4860; text-align:center; line-height:1.5;">What's already logged vs. what's missing?</div>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 24px; text-align:center;">
+          <div style="font-size:48px; font-weight:800; color:#f59e0b; line-height:1; margin-bottom:8px;">Dozens</div>
+          <div style="font-size:13px; color:#6b7280; line-height:1.5;">accounts across multiple AE teams to track every quarter</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.25); border-radius:14px; padding:20px 24px; text-align:center;">
+          <div style="font-size:48px; font-weight:800; color:#f59e0b; line-height:1; margin-bottom:8px;">Hours</div>
+          <div style="font-size:13px; color:#6b7280; line-height:1.5;">lost every quarter manually piecing together App Rigor</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:20px 24px; text-align:center;">
+          <div style="font-size:48px; font-weight:800; color:#f59e0b; line-height:1; margin-bottom:8px;">5+</div>
+          <div style="font-size:13px; color:#6b7280; line-height:1.5;">systems to cross-reference for a single activity log entry</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 3: Orbi Agent — graphical flow -->
+  <div class="slide slide-what" id="slide-3">
+    <div style="width:100%; max-width:1000px; display:flex; flex-direction:column; align-items:center; gap:20px;">
+
+      <div style="font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:#f59e0b;">Orbi Agent — How It Works</div>
+
+      <!-- Main flow row -->
+      <div style="display:flex; align-items:center; gap:0; width:100%;">
+
+        <!-- INPUTS column -->
+        <div style="display:flex; flex-direction:column; gap:10px; width:200px; flex-shrink:0;">
+          <div style="font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#4a4860; text-align:center; margin-bottom:4px;">Inputs</div>
+          <div style="background:rgba(0,181,226,0.06); border:1px solid rgba(0,181,226,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">📅</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">Google Calendar</div><div style="font-size:10px; color:#6b7280;">Meetings & attendees</div></div>
+          </div>
+          <div style="background:rgba(0,181,226,0.06); border:1px solid rgba(0,181,226,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">☁️</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">Salesforce org62</div><div style="font-size:10px; color:#6b7280;">Accounts, opps, DCs</div></div>
+          </div>
+          <div style="background:rgba(0,181,226,0.06); border:1px solid rgba(0,181,226,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">💬</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">Slack</div><div style="font-size:10px; color:#6b7280;">Deal context & signals</div></div>
+          </div>
+        </div>
+
+        <!-- Arrow in -->
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; position:relative; height:160px;">
+          <svg width="100%" height="60" viewBox="0 0 120 60" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="arrowGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:rgba(0,181,226,0.4)"/>
+                <stop offset="100%" style="stop-color:rgba(245,158,11,0.6)"/>
+              </linearGradient>
+            </defs>
+            <line x1="5" y1="30" x2="105" y2="30" stroke="url(#arrowGrad1)" stroke-width="2" stroke-dasharray="4,3"/>
+            <polygon points="105,25 115,30 105,35" fill="rgba(245,158,11,0.6)"/>
+          </svg>
+        </div>
+
+        <!-- ORBI AGENT center -->
+        <div style="flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:8px; width:180px;">
+          <div style="position:relative;">
+            <div style="position:absolute; inset:-16px; background:radial-gradient(ellipse at center, rgba(245,158,11,0.15) 0%, rgba(0,181,226,0.08) 50%, transparent 70%); border-radius:50%;"></div>
+            <img src="astromfg.png" style="width:130px; height:130px; object-fit:contain; position:relative; z-index:1; filter:drop-shadow(0 0 20px rgba(0,181,226,0.3)) drop-shadow(0 0 40px rgba(245,158,11,0.2));"/>
+          </div>
+          <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); border-radius:999px; padding:5px 16px; font-size:11px; font-weight:700; color:#f59e0b; letter-spacing:1px; text-transform:uppercase;">Orbi Agent</div>
+          <div style="display:flex; flex-direction:column; gap:4px; width:100%; margin-top:4px;">
+            <div style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:6px; padding:4px 8px; font-size:10px; color:#a78bfa; text-align:center;">Match attendees → accounts</div>
+            <div style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:6px; padding:4px 8px; font-size:10px; color:#a78bfa; text-align:center;">AI classifies + ranks opps</div>
+            <div style="background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2); border-radius:6px; padding:4px 8px; font-size:10px; color:#a78bfa; text-align:center;">Surface DC gaps</div>
+          </div>
+        </div>
+
+        <!-- Arrow out -->
+        <div style="flex:1; display:flex; align-items:center; justify-content:center; position:relative; height:160px;">
+          <svg width="100%" height="60" viewBox="0 0 120 60" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="arrowGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:rgba(245,158,11,0.6)"/>
+                <stop offset="100%" style="stop-color:rgba(16,185,129,0.5)"/>
+              </linearGradient>
+            </defs>
+            <line x1="5" y1="30" x2="105" y2="30" stroke="url(#arrowGrad2)" stroke-width="2" stroke-dasharray="4,3"/>
+            <polygon points="105,25 115,30 105,35" fill="rgba(16,185,129,0.6)"/>
+          </svg>
+        </div>
+
+        <!-- OUTPUTS column -->
+        <div style="display:flex; flex-direction:column; gap:10px; width:200px; flex-shrink:0;">
+          <div style="font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#4a4860; text-align:center; margin-bottom:4px;">Outputs</div>
+          <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">✅</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">Logged Activities</div><div style="font-size:10px; color:#6b7280;">SF Events, matched to opps</div></div>
+          </div>
+          <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">💼</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">Deal Contributions</div><div style="font-size:10px; color:#6b7280;">Gaps closed, splits set</div></div>
+          </div>
+          <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:10px;">
+            <span style="font-size:20px;">📋</span>
+            <div><div style="font-size:12px; font-weight:600; color:#e2e8f0;">DSR Updates</div><div style="font-size:10px; color:#6b7280;">Status Comments drafted</div></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom: user step -->
+      <div style="display:flex; align-items:center; gap:12px; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.2); border-radius:12px; padding:12px 24px; width:fit-content;">
+        <span style="font-size:18px;">👤</span>
+        <span style="font-size:13px; color:#e2e8f0;">You <strong style="color:#f59e0b;">review, adjust, and approve</strong> — nothing writes to Salesforce until you say so</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Slide 4: Live Demo -->
+  <div class="slide slide-demo" id="slide-4">
+    <div class="slide-label">Live Demo</div>
+    <div class="demo-headline">Let's see it <span>run.</span></div>
+    <div class="demo-sub">5-minute walkthrough of the Orbi SE Command Center</div>
+    <div class="demo-stops">
+      <div class="demo-stop"><div class="demo-stop-num">1</div> Dashboard & nav</div>
+      <div class="demo-stop"><div class="demo-stop-num">2</div> Generate Briefing</div>
+      <div class="demo-stop"><div class="demo-stop-num">3</div> Review & approve activities</div>
+      <div class="demo-stop"><div class="demo-stop-num">4</div> DC gaps tab</div>
+      <div class="demo-stop"><div class="demo-stop-num">5</div> DSR Review page</div>
+      <div class="demo-stop"><div class="demo-stop-num">6</div> Terminal — ask it anything</div>
+      <div class="demo-stop"><div class="demo-stop-num">7</div> Slack canvas post</div>
+    </div>
+  </div>
+
+  <!-- Slide 5: Close -->
+  <div class="slide" id="slide-5" style="background: radial-gradient(ellipse at 20% 60%, rgba(0,181,226,0.09) 0%, transparent 50%), radial-gradient(ellipse at 80% 30%, rgba(139,92,246,0.07) 0%, transparent 50%), #0e0d1a; display:none; flex-direction:row; align-items:center; justify-content:center; gap:0; padding:0;">
+
+    <!-- Left: content -->
+    <div style="flex:1; padding:60px 60px 60px 80px; display:flex; flex-direction:column; justify-content:center; gap:32px;">
+
+      <!-- Brand -->
+      <div>
+        <div class="brand" style="text-align:left; font-size:80px; line-height:1;">Orbi</div>
+        <div class="brand-sub" style="text-align:left;">SE Command Center</div>
+      </div>
+
+      <!-- Impact metrics -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; max-width:480px;">
+        <div style="background:rgba(0,181,226,0.07); border:1px solid rgba(0,181,226,0.2); border-radius:12px; padding:16px 14px; text-align:center;">
+          <div style="font-size:32px; font-weight:800; color:#00B5E2; line-height:1; margin-bottom:4px;">5→1</div>
+          <div style="font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:1px;">Systems</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.25); border-radius:12px; padding:16px 14px; text-align:center;">
+          <div style="font-size:32px; font-weight:800; color:#f59e0b; line-height:1; margin-bottom:4px;">Hours</div>
+          <div style="font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:1px;">→ Minutes</div>
+        </div>
+        <div style="background:rgba(139,92,246,0.07); border:1px solid rgba(139,92,246,0.2); border-radius:12px; padding:16px 14px; text-align:center;">
+          <div style="font-size:32px; font-weight:800; color:#8b5cf6; line-height:1; margin-bottom:4px;">0</div>
+          <div style="font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:1px;">Engineering</div>
+        </div>
+      </div>
+
+      <!-- Closing statement -->
+      <div style="max-width:440px;">
+        <p style="font-size:20px; font-weight:700; color:#f1f5f9; line-height:1.5; margin-bottom:12px;">
+          If you're an SE spending hours on admin<br>that should take minutes —
+        </p>
+        <p style="font-size:22px; font-weight:800; color:#f59e0b;">this was built for you.</p>
+      </div>
+
+      <!-- Tag -->
+      <div class="pill" style="align-self:flex-start;">⚡ Vibe Coding Competition · Built with Claude Code · 2026</div>
+    </div>
+
+    <!-- Right: Astro -->
+    <div style="width:340px; flex-shrink:0; position:relative; height:100%; display:flex; align-items:flex-end; justify-content:center; overflow:hidden;">
+      <div style="position:absolute; bottom:0; right:-20px; width:360px; height:360px; background:radial-gradient(ellipse at center, rgba(0,181,226,0.18) 0%, rgba(139,92,246,0.08) 40%, transparent 70%); border-radius:50%;"></div>
+      <img src="astromfg.png" alt="Orbi Agent" style="width:300px; height:300px; object-fit:contain; position:relative; z-index:1; filter:drop-shadow(0 0 40px rgba(0,181,226,0.3)) drop-shadow(0 0 80px rgba(139,92,246,0.15));" />
+    </div>
+
+  </div>
+
+  <!-- Appendix: Build Story (not in main nav) -->
+  <div class="slide slide-build" id="slide-appendix" style="display:none;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+      <div class="slide-label" style="margin-bottom:0;">Appendix</div>
+      <span style="font-size:11px; color:#4a4860;">— Build Story</span>
+    </div>
+    <div class="problem-headline" style="font-size:28px; margin-bottom:16px;">Built by an SE. Directed to Claude Code.<br><span>No engineering background required.</span></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; width:100%; max-width:960px;">
+      <div class="build-card challenge">
+        <div class="build-card-title">Real Challenges We Hit</div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Authentication across 5 systems</strong> — SF CLI, Google OAuth, Slack MCP, aisuite proxy, org62 sessions. Each had a different auth model.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>MCP isn't directly callable from Node</strong> — aisuite's Slack proxy runs on a dynamic port with a session-only secret. Required spawning Claude as a subprocess to use MCP tools.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Claude's safety filters block tool-call style prompts</strong> — natural language + neutral working directory was the fix.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>React state mismatch</strong> — mixing localStorage, Zustand, and local useState for the same value caused "button does nothing" bugs.</div></div>
+      </div>
+      <div class="build-card lesson">
+        <div class="build-card-title">What I'd Do Differently</div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Learn CLAUDE.md and memory files first.</strong> Found them at AI Day after most of Orbi was built.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Design the data model on paper first.</strong> Calendar → attendees → accounts → opps → DCs. Explaining it incrementally caused drift.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Test in the actual app.</strong> Claude reports "clean compile" confidently. Real bugs only show at runtime.</div></div>
+        <div class="build-item"><div class="build-dot"></div><div class="build-text"><strong>Pick one state layer.</strong> Mixing state mechanisms for the same value always causes pain.</div></div>
+      </div>
+    </div>
+    <div style="margin-top:16px; text-align:center;">
+      <button onclick="goTo(5)" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#6b7280; padding:6px 16px; border-radius:999px; font-size:12px; cursor:pointer;">← Back to deck</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prevSlide()">← Prev</button>
+  <div class="dots" id="dots"></div>
+  <span class="slide-counter" id="counter">1 / 5</span>
+  <button onclick="nextSlide()">Next →</button>
+</div>
+
+<button class="talk-toggle" onclick="toggleTalk()" title="Talk Track">📝</button>
+<button class="talk-toggle" onclick="showAppendix()" style="right:90px;" title="Appendix: Build Story">📎</button>
+
+<div class="talk-track" id="talk-track">
+  <strong>Talk Track</strong>
+  <span id="talk-text"></span>
+</div>
+
+<script>
+const SLIDES = 5;
+let current = 1;
+let talkVisible = false;
+
+const talkTracks = {
+  1: "I'm a Distinguished SE at Salesforce. I cover dozens of accounts across multiple AE teams, and like every SE, I'm expected to keep my activities logged, my Deal Contributions filed, and my DSRs current. The problem is that actually doing all of that — especially at the end of a quarter — was consuming hours of my time. Every single quarter. So I decided to build a tool to fix it. And I built it entirely with Claude Code.",
+  2: "The root of the problem was that all the information I needed was scattered across five different places. To log a single activity, I'd have to open my calendar to figure out what I worked on, check Slack for context on the meeting, go into org62 to find the right opportunity, pull up a report to see what was already logged, and check email for any follow-ups. Five systems, every time, for every account. For a Distinguished SE managing dozens of accounts each quarter, that adds up to hours of admin work that has nothing to do with actually selling.",
+  3: "Orbi gives you one button that does all the work you used to do manually across five systems. You hit Generate Briefing, review what it found, make any adjustments, and approve. That's it. Every meeting you had is matched to the right account and opportunity. Every DC gap — the ones you'd miss at quarter end — is already surfaced. You don't have to remember what you worked on, hunt down the right opp, or manually check what's already logged. Orbi already did it. The only decision you make is whether to approve.",
+  4: "Let me show you the app in action. I'll walk through generating a briefing, reviewing and approving the activity and DC recommendations, the DSR Review page where you can draft and update your DSR status comments, and finally the Terminal — which is a full Claude Code session embedded directly in the app, with your Salesforce data, calendar, and Slack already authenticated and ready to use.",
+  5: "Orbi isn't a product to sell. It's an internal tool — a personal AI admin built for SEs who have more accounts than hours in the week. Before Orbi, App Rigor was a multi-hour ordeal every quarter. Five systems open at once, manually connecting the dots. Now it's one screen, one button, and under ten minutes. If you're spending hours on admin that should take minutes, this was built for you."
+};
+
+function buildDots() {
+  const dotsEl = document.getElementById('dots');
+  for (let i = 1; i <= SLIDES; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 1 ? ' active' : '');
+    d.onclick = () => goTo(i);
+    dotsEl.appendChild(d);
+  }
+}
+
+function goTo(n) {
+  const app = document.getElementById('slide-appendix');
+  if (app) { app.classList.remove('active'); app.style.display = 'none'; }
+  const prev = document.getElementById('slide-' + current);
+  prev.classList.remove('active');
+  current = Math.max(1, Math.min(SLIDES, n));
+  const next = document.getElementById('slide-' + current);
+  next.style.display = 'flex';
+  setTimeout(() => next.classList.add('active'), 10);
+  document.getElementById('counter').textContent = current + ' / ' + SLIDES;
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    d.classList.toggle('active', i + 1 === current);
+  });
+  document.getElementById('talk-text').textContent = talkTracks[current] || '';
+}
+
+function nextSlide() { goTo(current + 1); }
+function prevSlide() { goTo(current - 1); }
+
+function showAppendix() {
+  const prev = document.getElementById('slide-' + current);
+  prev.classList.remove('active');
+  const app = document.getElementById('slide-appendix');
+  app.style.display = 'flex';
+  setTimeout(() => app.classList.add('active'), 10);
+  document.getElementById('counter').textContent = 'Appendix';
+  document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+}
+
+function toggleTalk() {
+  talkVisible = !talkVisible;
+  document.getElementById('talk-track').classList.toggle('visible', talkVisible);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+  if (e.key === 'ArrowLeft') prevSlide();
+  if (e.key === 't' || e.key === 'T') toggleTalk();
+});
+
+buildDots();
+document.getElementById('talk-text').textContent = talkTracks[1];
+</script>
+</body>
+</html>

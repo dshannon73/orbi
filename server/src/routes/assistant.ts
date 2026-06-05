@@ -284,6 +284,7 @@ router.post('/briefing', async (req, res) => {
       accountScope,    // comma-separated name filter (include/exclude)
       calExclude,      // comma-separated exclude terms for calendar events
       roleFilter,      // comma-separated role fuzzy match list
+      lookbackMonths,  // historical engagement window in months (default 24)
     } = req.body as {
       currentUserId: string;
       dateFrom: string;
@@ -291,12 +292,15 @@ router.post('/briefing', async (req, res) => {
       accountScope?: string;
       calExclude?: string;
       roleFilter?: string;
+      lookbackMonths?: number;
     };
 
     if (!currentUserId) { send('error', { error: 'currentUserId required' }); return res.end(); }
 
     const fromDT = `${dateFrom}T00:00:00Z`;
     const toDT   = `${dateTo}T23:59:59Z`;
+    const histLookbackMonths = lookbackMonths ?? 24;
+    const historicalFromDT = new Date(Date.now() - histLookbackMonths * 30.44 * 86400_000).toISOString().slice(0, 10) + 'T00:00:00Z';
     const scopeTerms  = parseTerms(parseTermList(accountScope ?? ''));
     const excludeTerms = parseTerms(parseTermList(calExclude ?? ''));
     const roleTerms = (roleFilter ?? '').split(',').map(r => r.trim()).filter(Boolean);
@@ -690,6 +694,41 @@ router.post('/briefing', async (req, res) => {
 
     send('progress', { step: 'dcs', message: `${myDCOppIds.size} my DC${myDCOppIds.size !== 1 ? 's' : ''}, ${teamDCOppIds.size} team-attendee DC gap${teamDCOppIds.size !== 1 ? 's' : ''}` });
 
+    // ── 5b. Historical engagement (last N months) ──────────────────────────────
+    // Find accounts where user has a DC or Activity in the lookback window.
+    // Expand via hierarchy (parent + siblings + direct children) using parentAccountMap.
+    const historicallyEngagedAccountIds = new Set<string>();
+    try {
+      let histDCRecords: any[] = [];
+      let histActRecords: any[] = [];
+      try { const r = await conn.query(`SELECT Opportunity__r.AccountId FROM Deal_Contribution__c WHERE SE_Name__c = '${currentUserId}' AND CreatedDate >= ${historicalFromDT} AND Opportunity__r.AccountId != null`); histDCRecords = r.records as any[]; } catch { /* non-fatal */ }
+      try { const r = await conn.query(`SELECT AccountId FROM Event WHERE OwnerId = '${currentUserId}' AND StartDateTime >= ${historicalFromDT} AND AccountId != null LIMIT 2000`); histActRecords = r.records as any[]; } catch { /* non-fatal */ }
+      histDCRecords.forEach((d: any) => { const accId = d.Opportunity__r?.AccountId; if (accId) historicallyEngagedAccountIds.add(accId); });
+      histActRecords.forEach((e: any) => { if (e.AccountId) historicallyEngagedAccountIds.add(e.AccountId); });
+      send('debug', { message: `Historical engagement: ${historicallyEngagedAccountIds.size} account(s) from last ${histLookbackMonths} months` });
+    } catch (err: any) {
+      send('debug', { message: `Historical engagement error: ${err.message}` });
+    }
+
+    // Expand via hierarchy: for each historically-engaged account, also mark its
+    // parent, siblings (same parent), and direct children as engaged.
+    // Uses parentAccountMap which was built in step 4 from in-scope accounts.
+    const expandedEngagedAccountIds = new Set<string>(historicallyEngagedAccountIds);
+    historicallyEngagedAccountIds.forEach(accId => {
+      const parent = parentAccountMap.get(accId);
+      if (parent?.id) {
+        expandedEngagedAccountIds.add(parent.id);
+        // siblings: other accounts with same parent
+        parentAccountMap.forEach((p, sibId) => {
+          if (p.id === parent.id) expandedEngagedAccountIds.add(sibId);
+        });
+      }
+      // direct children: accounts whose parent is this account
+      parentAccountMap.forEach((p, childId) => {
+        if (p.id === accId) expandedEngagedAccountIds.add(childId);
+      });
+    });
+
     // Build seId → accountIds index so we can quickly check per-event whether an attendee
     // has a DC on a given account (used as a matching signal for the LLM + group scoring)
     const seIdToAccountIds = new Map<string, Set<string>>();
@@ -1062,7 +1101,22 @@ Respond ONLY with valid JSON: {"events":[{"id":"string","taskType":"string_or_nu
       if (!acc) continue;
 
       const calStats = calStatsByAccount.get(accountId) ?? { totalEvents: 0, totalMins: 0, unloggedEvents: [], loggedEvents: [] };
-      const oppsForAccount = oppsByAccount.get(accountId) ?? [];
+
+      // Include opps from this account + parent + siblings so that e.g. "Illuminate Agentforce"
+      // on the parent account still appears in the OppPicker for a child-account event.
+      const parentId = parentAccountMap.get(accountId)?.id ?? null;
+      const relatedAccountIds = new Set<string>([accountId]);
+      if (parentId) relatedAccountIds.add(parentId);
+      parentAccountMap.forEach((p, aid) => { if (p.id === parentId && parentId) relatedAccountIds.add(aid); });
+      // Also include opps the user has a DC on, even if Omitted (always show user's own DCs)
+      const oppsForAccount = [
+        ...new Map(
+          [...relatedAccountIds].flatMap(aid => oppsByAccount.get(aid) ?? [])
+            // Always include opps where user has a DC, regardless of forecast category
+            .concat(scopedOpps.filter(o => myDCOppIds.has(o.Id) && relatedAccountIds.has(o.AccountId)))
+            .map(o => [o.Id, o])
+        ).values()
+      ];
       const ranked = rankOpps(oppsForAccount, myDCOppIds, teamDCOppIds, oppIdsWithMyActivity);
 
       // DC gaps: opps where I have no DC but any team member does, or I have opp-specific logged activity
@@ -1116,6 +1170,7 @@ Respond ONLY with valid JSON: {"events":[{"id":"string","taskType":"string_or_nu
             totalHours,
             dcReasons,
             splitReason: splitReasonParts[0] ?? '',
+            isHistoricallyEngaged: expandedEngagedAccountIds.has(accountId),
           };
         });
 
@@ -1238,6 +1293,19 @@ Respond ONLY with valid JSON: {"events":[{"id":"string","taskType":"string_or_nu
       suggestedGroup: suggestedGroupMap.get(e.id) ?? 'Other',
     }));
 
+    // Deduplicate DC gaps globally — each opp should appear in exactly one group
+    // (the highest-scoring one). This prevents duplicates when hierarchy expansion
+    // causes the same opp to land in both parent and child account groups.
+    const claimedOppIds = new Set<string>();
+    const sortedByScore = [...accountGroups].sort((a, b) => b.groupScore - a.groupScore);
+    sortedByScore.forEach(g => {
+      g.dcGaps = g.dcGaps.filter(d => {
+        if (claimedOppIds.has(d.oppId)) return false;
+        claimedOppIds.add(d.oppId);
+        return true;
+      });
+    });
+
     send('progress', { step: 'grouping', message: `${accountGroups.length} account group${accountGroups.length !== 1 ? 's' : ''} built` });
 
     send('result', {
@@ -1303,6 +1371,167 @@ router.post('/execute', async (req, res) => {
           `SELECT Id FROM Deal_Contribution__c WHERE SE_Name__c = '${currentUserId}' AND Opportunity__c = '${dc.oppId}' LIMIT 1`
         );
         const fields: any = { Opportunity_Role__c: dc.role, Split_Percentage__c: dc.splitPct, Comments__c: '#orbi' };
+        if ((existing.records as any[]).length > 0) {
+          await conn.sobject('Deal_Contribution__c').update({ Id: (existing.records[0] as any).Id, ...fields });
+          results.push({ type: 'dc', name: dc.oppId, action: 'updated' });
+        } else {
+          await conn.sobject('Deal_Contribution__c').create({ SE_Name__c: currentUserId, Opportunity__c: dc.oppId, ...fields });
+          results.push({ type: 'dc', name: dc.oppId, action: 'created' });
+        }
+      } catch (e: any) {
+        results.push({ type: 'dc', name: dc.oppId, action: 'error: ' + e.message });
+      }
+    }
+
+    res.json({ results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── /chat — conversational activity/DC creation ────────────────────────────
+router.post('/chat', async (req, res) => {
+  try {
+    const conn = getConnection();
+    const { currentUserId, messages, briefingContext } = req.body as {
+      currentUserId: string;
+      messages: { role: 'user' | 'assistant'; content: string }[];
+      briefingContext?: {
+        accounts: { accountId: string; accountName: string; opps: { oppId: string; oppName: string; stage: string; amount: number }[] }[];
+      };
+    };
+    if (!currentUserId) return res.status(400).json({ error: 'currentUserId required' });
+
+    // Fetch user's default record type + task types
+    const [rtRes, metaRes] = await Promise.all([
+      conn.query(`SELECT Id FROM RecordType WHERE SobjectType = 'Event' AND IsActive = true AND Name = 'Solutions Event' LIMIT 1`).catch(() => ({ records: [] })),
+      conn.query(`SELECT SE_Task_Type__c FROM Event WHERE OwnerId = '${currentUserId}' AND SE_Task_Type__c != null GROUP BY SE_Task_Type__c LIMIT 10`).catch(() => ({ records: [] })),
+    ]);
+    const defaultRTId = (rtRes.records[0] as any)?.Id ?? null;
+    const taskTypes = [...new Set((metaRes.records as any[]).map(r => r.SE_Task_Type__c).filter(Boolean))];
+
+    // Extract any account/opp names mentioned in the latest user message that aren't in scope,
+    // then do a live SF lookup to resolve them
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+    const scopedAccountNames = new Set((briefingContext?.accounts ?? []).map(a => a.accountName.toLowerCase()));
+
+    // Simple heuristic: pull quoted strings or capitalized multi-word phrases likely to be account names
+    const candidateNames = (lastUserMsg.match(/["']([^"']+)["']|([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)/g) ?? [])
+      .map(s => s.replace(/["']/g, '').trim())
+      .filter(s => s.length > 2 && !scopedAccountNames.has(s.toLowerCase()));
+
+    let extraContext = '';
+    if (candidateNames.length > 0) {
+      // Search SF for accounts + opps matching candidate names not in scope
+      const nameFilter = candidateNames.slice(0, 5).map(n => `Name LIKE '%${n.replace(/'/g, "\\'")}%'`).join(' OR ');
+      const [accRes, oppRes] = await Promise.all([
+        conn.query(`SELECT Id, Name FROM Account WHERE ${nameFilter} AND IsDeleted = false ORDER BY LastModifiedDate DESC LIMIT 10`).catch(() => ({ records: [] })),
+        conn.query(`SELECT Id, Name, AccountId, Account.Name, StageName, Amount FROM Opportunity WHERE (${nameFilter}) AND IsClosed = false ORDER BY CloseDate ASC LIMIT 10`).catch(() => ({ records: [] })),
+      ]);
+      const accLines = (accRes.records as any[]).map(a => `- Account: ${a.Name} (id:${a.Id})`);
+      const oppLines = (oppRes.records as any[]).map(o => `- Opp: ${o.Name} [${o.StageName}, $${Math.round((o.Amount ?? 0) / 1000)}k, id:${o.Id}] on ${(o as any).Account?.Name ?? 'unknown account'} (accountId:${o.AccountId})`);
+      if (accLines.length || oppLines.length) {
+        extraContext = `\nLive SF lookup results:\n${[...accLines, ...oppLines].join('\n')}`;
+      }
+    }
+
+    const accountSummary = (briefingContext?.accounts ?? []).slice(0, 30).map(a =>
+      `- ${a.accountName} (id:${a.accountId}): ${a.opps.slice(0, 4).map(o => `${o.oppName} [$${Math.round((o.amount ?? 0) / 1000)}k, id:${o.oppId}]`).join('; ')}`
+    ).join('\n');
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const systemPrompt = `You are Orbi, a terse Salesforce assistant for Sales Engineers. Today: ${today}. User SF ID: ${currentUserId}.
+${defaultRTId ? `Event RecordTypeId: ${defaultRTId}` : ''}
+${taskTypes.length ? `SE task types: ${taskTypes.join(', ')}` : ''}
+
+Scoped accounts/opps:
+${accountSummary || '(none)'}
+${extraContext}
+
+Rules:
+- Be VERY concise. 1-2 sentences max for conversational replies. No pleasantries.
+- Use exact IDs from scope or live lookup above. Never invent IDs.
+- If you still can't find an account/opp, say so in one sentence.
+- Spread activities across working days (Mon–Fri, 9am–5pm).
+- When ready to act, output ONLY a \`\`\`json block (no other text) in this format:
+\`\`\`json
+{
+  "type": "preview",
+  "summary": "one-line summary",
+  "activities": [{ "summary": "...", "startDateTime": "YYYY-MM-DDTHH:mm:ss", "durationMins": 120, "whatId": "oppId or null", "seTaskType": "...", "recordTypeId": "${defaultRTId ?? null}" }],
+  "dcs": [{ "oppId": "...", "role": "Distinguished SE", "splitPct": 50 }]
+}
+\`\`\`
+- If you need clarification first, ask in ONE short question only.`;
+
+    const completion = await llmGateway.chat.completions.create({
+      model: 'claude-sonnet-4-20250514',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages,
+      ],
+      max_tokens: 4096,
+    } as any);
+
+    const raw = completion.choices[0]?.message?.content ?? '';
+
+    const jsonMatch = raw.match(/```json\s*([\s\S]*?)```/i);
+    if (jsonMatch) {
+      try {
+        const plan = JSON.parse(jsonMatch[1].trim());
+        const prose = raw.replace(/```json[\s\S]*?```/i, '').trim();
+        return res.json({ type: 'plan', plan, prose });
+      } catch {
+        // fall through to text
+      }
+    }
+
+    res.json({ type: 'text', content: raw });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── /chat/execute — execute a confirmed plan ────────────────────────────────
+router.post('/chat/execute', async (req, res) => {
+  try {
+    const conn = getConnection();
+    const { currentUserId, plan } = req.body as {
+      currentUserId: string;
+      plan: {
+        activities?: { summary: string; startDateTime: string; durationMins?: number; whatId?: string | null; seTaskType?: string | null; recordTypeId?: string | null }[];
+        dcs?: { oppId: string; role: string; splitPct: number }[];
+      };
+    };
+    if (!currentUserId) return res.status(400).json({ error: 'currentUserId required' });
+
+    const results: { type: string; name: string; action: string }[] = [];
+
+    for (const act of plan.activities ?? []) {
+      try {
+        const endDT = new Date(new Date(act.startDateTime).getTime() + (act.durationMins ?? 60) * 60000).toISOString();
+        await conn.sobject('Event').create({
+          Subject: act.summary,
+          StartDateTime: act.startDateTime,
+          EndDateTime: endDT,
+          OwnerId: currentUserId,
+          ...(act.whatId      ? { WhatId: act.whatId }                : {}),
+          ...(act.seTaskType  ? { SE_Task_Type__c: act.seTaskType }   : {}),
+          ...(act.recordTypeId ? { RecordTypeId: act.recordTypeId }   : {}),
+        });
+        results.push({ type: 'activity', name: act.summary, action: 'created' });
+      } catch (e: any) {
+        results.push({ type: 'activity', name: act.summary, action: 'error: ' + e.message });
+      }
+    }
+
+    for (const dc of plan.dcs ?? []) {
+      try {
+        const existing = await conn.query(
+          `SELECT Id FROM Deal_Contribution__c WHERE SE_Name__c = '${currentUserId}' AND Opportunity__c = '${dc.oppId}' LIMIT 1`
+        );
+        const fields: any = { Opportunity_Role__c: dc.role, Split_Percentage__c: dc.splitPct, Comments__c: '#orbi-chat' };
         if ((existing.records as any[]).length > 0) {
           await conn.sobject('Deal_Contribution__c').update({ Id: (existing.records[0] as any).Id, ...fields });
           results.push({ type: 'dc', name: dc.oppId, action: 'updated' });

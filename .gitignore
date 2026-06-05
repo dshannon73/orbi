@@ -1,8 +1,4 @@
 node_modules/
-client/node_modules/
-server/node_modules/
-client/dist/
-.env
-*.env.local
+client/
+server/
 .DS_Store
-**/.DS_Store

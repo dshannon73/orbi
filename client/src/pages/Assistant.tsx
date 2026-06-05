@@ -13,6 +13,7 @@ import {
   type CalEvent, type LoggedCalEvent, type RankedOpp, type DCGap,
   type AccountGroup, type UnmatchedEvent, type BriefingResult,
 } from '@/store/assistant';
+import { startBriefing, isBriefingRunning } from '@/services/briefingService';
 import { useUserPrefs } from '@/store/userPrefs';
 import { DateRangeFilter, resolveDateRange } from '@/components/DateRangeFilter';
 import { Button } from '@/components/ui/button';
@@ -173,151 +174,139 @@ interface ExecResult { type: string; name: string; action: string }
 // ── Agent loading screen ──────────────────────────────────────────────────────
 
 const AGENT_STEPS: { step: string; label: string; icon: string }[] = [
-  { step: 'calendar',  label: 'Reading Google Calendar',         icon: '📅' },
-  { step: 'attendees', label: 'Resolving attendees in Salesforce', icon: '👥' },
-  { step: 'activities',label: 'Fetching logged SF activities',    icon: '📋' },
-  { step: 'opps',      label: 'Querying accounts & opps',         icon: '🏢' },
-  { step: 'dcs',       label: 'Fetching Deal Contributions',      icon: '💼' },
-  { step: 'matching',  label: 'Matching events to accounts',      icon: '🔗' },
-  { step: 'llm',       label: 'AI classifying & matching',        icon: '✦' },
-  { step: 'grouping',  label: 'Building briefing',                icon: '⚡' },
+  { step: 'calendar',   label: 'Google Calendar',      icon: '📅' },
+  { step: 'attendees',  label: 'Resolve attendees',    icon: '👥' },
+  { step: 'activities', label: 'SF activities',        icon: '📋' },
+  { step: 'opps',       label: 'Accounts & opps',      icon: '🏢' },
+  { step: 'dcs',        label: 'Deal Contributions',   icon: '💼' },
+  { step: 'matching',   label: 'Event matching',       icon: '🔗' },
+  { step: 'llm',        label: 'AI classification',    icon: '✦' },
+  { step: 'grouping',   label: 'Building briefing',    icon: '⚡' },
 ];
 
 function AgentLoadingScreen({ progressLog }: { progressLog: { step: string; message: string; debug?: boolean }[] }) {
-  const completedSteps = new Set(
-    progressLog.filter(p => !p.debug).map(p => p.step)
-  );
+  const completedSteps = new Set(progressLog.filter(p => !p.debug).map(p => p.step));
   const lastLog = progressLog.filter(p => !p.debug).at(-1);
   const activeStep = lastLog?.step ?? '';
   const activeStepIndex = AGENT_STEPS.findIndex(s => s.step === activeStep);
 
   return (
     <div
-      className="rounded-2xl overflow-hidden"
+      className="rounded-2xl flex"
       style={{
-        background: 'linear-gradient(160deg, #0e0d1a 0%, #161428 50%, #0e0d1a 100%)',
+        background: 'linear-gradient(160deg, #0e0d1a 0%, #161428 60%, #0e0d1a 100%)',
         border: '1px solid rgba(245,158,11,0.15)',
         boxShadow: '0 4px 40px rgba(0,0,0,0.15)',
+        minHeight: 320,
       }}
     >
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 flex items-center gap-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-        {/* Pulsing orb */}
-        <div className="relative shrink-0">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-              boxShadow: '0 0 20px rgba(245,158,11,0.4)',
-            }}
+      {/* ── Left: all content, never clipped ── */}
+      <div className="flex-1 flex flex-col px-7 py-7" style={{ minWidth: 0 }}>
+        {/* Title — no overflow:hidden anywhere near this */}
+        <div style={{ marginBottom: 6 }}>
+          <p
+            className="text-white font-bold"
+            style={{ fontFamily: 'var(--font-display)', fontSize: 22, lineHeight: 1.5 }}
           >
-            <span style={{ fontSize: 16, fontFamily: 'var(--font-display)', color: '#0e0d1a', fontWeight: 800 }}>O</span>
-          </div>
-          {/* Outer ring pulse */}
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              border: '2px solid rgba(245,158,11,0.3)',
-              animation: 'orbit 3s linear infinite',
-              scale: '1.4',
-            }}
-          />
-        </div>
-        <div>
-          <p className="text-white font-semibold text-[15px]" style={{ fontFamily: 'var(--font-display)' }}>
             Orbi Agent running
           </p>
-          <p className="text-[11px] mt-0.5" style={{ color: '#5c5a78' }}>
+          <p className="text-[12px] mt-1" style={{ color: '#5c5a78' }}>
             {lastLog?.message ?? 'Initializing…'}
           </p>
-        </div>
-        {/* Animated dots */}
-        <div className="ml-auto flex items-center gap-1">
-          {[0, 1, 2].map(i => (
-            <div
-              key={i}
-              className="w-1.5 h-1.5 rounded-full"
-              style={{
+          <div className="flex items-center gap-1 mt-3">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full" style={{
                 background: '#f59e0b',
                 animation: `pulse-dot 1.4s ease-in-out ${i * 0.2}s infinite`,
-              }}
-            />
-          ))}
+              }} />
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Steps grid */}
-      <div className="px-6 py-5 grid grid-cols-4 gap-3">
-        {AGENT_STEPS.map((s, i) => {
-          const done    = completedSteps.has(s.step);
-          const active  = s.step === activeStep;
-          const pending = !done && !active;
+        {/* Divider */}
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '20px 0' }} />
 
-          return (
-            <div
-              key={s.step}
-              className="rounded-xl px-3 py-2.5 flex flex-col gap-1.5 transition-all duration-300"
-              style={{
-                background: done
-                  ? 'rgba(16,185,129,0.08)'
-                  : active
-                  ? 'rgba(245,158,11,0.1)'
-                  : 'rgba(255,255,255,0.02)',
-                border: done
-                  ? '1px solid rgba(16,185,129,0.2)'
-                  : active
-                  ? '1px solid rgba(245,158,11,0.25)'
-                  : '1px solid rgba(255,255,255,0.04)',
-                boxShadow: active ? '0 0 12px rgba(245,158,11,0.1)' : 'none',
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span style={{ fontSize: 14 }}>{s.icon}</span>
-                {done && (
-                  <span style={{ color: '#10b981', fontSize: 12 }}>✓</span>
-                )}
-                {active && (
-                  <div
-                    className="w-3 h-3 rounded-full border border-t-transparent animate-spin"
-                    style={{ borderColor: '#f59e0b', borderTopColor: 'transparent' }}
-                  />
-                )}
-              </div>
-              <p
-                className="text-[10px] font-medium leading-tight"
+        {/* Steps grid — 4 cols, 2 rows */}
+        <div className="grid grid-cols-4 gap-2.5 flex-1">
+          {AGENT_STEPS.map((s, idx) => {
+            const active = s.step === activeStep;
+            const done   = completedSteps.has(s.step) && !active;
+            return (
+              <div
+                key={s.step}
+                className="rounded-xl px-3 py-2.5 flex flex-col gap-2 transition-all duration-300"
                 style={{
-                  color: done ? '#10b981' : active ? '#f59e0b' : '#3a3856',
-                  fontFamily: 'var(--font-mono)',
+                  background: done ? 'rgba(16,185,129,0.08)' : active ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.02)',
+                  border: done ? '1px solid rgba(16,185,129,0.2)' : active ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(255,255,255,0.04)',
+                  boxShadow: active ? '0 0 14px rgba(245,158,11,0.12)' : 'none',
                 }}
               >
-                {s.label}
-              </p>
-            </div>
-          );
-        })}
-      </div>
+                <div className="flex items-center justify-between">
+                  <span style={{ fontSize: 13 }}>{s.icon}</span>
+                  {done && <span style={{ color: '#10b981', fontSize: 11 }}>✓</span>}
+                  {active && (
+                    <div className="w-3 h-3 rounded-full animate-spin" style={{
+                      border: '1.5px solid #f59e0b', borderTopColor: 'transparent',
+                    }} />
+                  )}
+                </div>
+                <p className="text-[10px] font-medium leading-tight" style={{
+                  color: done ? '#10b981' : active ? '#f59e0b' : '#3a3856',
+                  fontFamily: 'var(--font-mono)',
+                }}>
+                  {s.label}
+                </p>
+              </div>
+            );
+          })}
+        </div>
 
-      {/* Progress bar */}
-      <div className="px-6 pb-5">
-        <div
-          className="h-1 rounded-full overflow-hidden"
-          style={{ background: 'rgba(255,255,255,0.05)' }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{
+        {/* Progress bar */}
+        <div style={{ marginTop: 20 }}>
+          <div className="rounded-full" style={{ height: 3, background: 'rgba(255,255,255,0.05)' }}>
+            <div className="rounded-full transition-all duration-700" style={{
+              height: '100%',
               width: `${Math.max(4, ((activeStepIndex + 1) / AGENT_STEPS.length) * 100)}%`,
               background: 'linear-gradient(to right, #f59e0b, #fbbf24)',
               boxShadow: '0 0 8px rgba(245,158,11,0.6)',
-            }}
-          />
+            }} />
+          </div>
+          <p className="text-[10px] mt-1.5 text-right tabular" style={{ color: '#3a3856' }}>
+            {activeStepIndex + 1} / {AGENT_STEPS.length}
+          </p>
         </div>
-        <p
-          className="text-[10px] mt-2 text-right tabular"
-          style={{ color: '#3a3856' }}
-        >
-          {activeStepIndex + 1} / {AGENT_STEPS.length}
-        </p>
+      </div>
+
+      {/* ── Right: robot panel, overflow hidden only here ── */}
+      <div
+        className="shrink-0 relative rounded-r-2xl"
+        style={{
+          width: 260,
+          background: 'linear-gradient(to left, #0a0916, transparent)',
+          overflow: 'hidden',
+        }}
+      >
+        <img
+          src="/astromfg.png"
+          alt="Orbi agent"
+          style={{
+            position: 'absolute',
+            bottom: -16,
+            right: -10,
+            width: 280,
+            height: 280,
+            objectFit: 'contain',
+            opacity: 0.95,
+            maskImage: 'linear-gradient(to right, transparent 0%, black 30%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 30%)',
+          }}
+        />
+        {/* Subtle amber glow behind robot */}
+        <div style={{
+          position: 'absolute', bottom: 0, right: 0,
+          width: 200, height: 200,
+          background: 'radial-gradient(ellipse at bottom right, rgba(245,158,11,0.12) 0%, transparent 70%)',
+        }} />
       </div>
     </div>
   );
@@ -345,7 +334,7 @@ const PAGE = 'assistant';
 
 export default function Assistant() {
   const currentUser = useAuthStore(s => s.user);
-  const { defaultRecordTypeId, defaultSeTaskType } = useUserPrefs();
+  const { defaultRecordTypeId, defaultSeTaskType, dcLookbackMonths } = useUserPrefs();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [calConnected, setCalConnected] = useState<boolean | null>(null);
@@ -364,8 +353,10 @@ export default function Assistant() {
 
   const {
     accountScope, setAccountScope, calExclude, setCalExclude, roleFilter, setRoleFilter,
-    briefingStatus, setBriefingStatus,
-    briefingResult: result, setBriefingResult: setBriefingResultStore,
+    briefingStatus,
+    briefingError,
+    briefingResult: result,
+    progressLog,
     resultTab, setResultTab,
     selectedEvents: selectedEventsArr, setSelectedEvents: setSelectedEventsArr,
     selectedDCs: selectedDCsArr, setSelectedDCs: setSelectedDCsArr,
@@ -379,8 +370,9 @@ export default function Assistant() {
     unmatchedWhatIdMap, setUnmatchedWhatIdMap,
     taskTypeOverrides, setTaskTypeOverrides,
     globalTaskType, setGlobalTaskType,
-    resetBriefing,
   } = useAssistantFilters();
+
+  const status = briefingStatus;
 
   // Convert arrays ↔ Sets for component consumption
   const selectedEvents = new Set(selectedEventsArr);
@@ -417,19 +409,18 @@ export default function Assistant() {
   const wrappedSetTaskTypeOverrides = (fn: (prev: Record<string, string>) => Record<string, string>) =>
     setTaskTypeOverrides(fn(taskTypeOverrides));
 
-  // status: 'loading' is transient (page reload mid-run = idle), others persist
-  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
-    briefingStatus === 'done' || briefingStatus === 'error' ? briefingStatus : 'idle'
-  );
-
-
   // UI-only state — not persisted
-  const [error, setError] = useState('');
-  const [progressLog, setProgressLog] = useState<{ step: string; message: string; debug?: boolean }[]>([]);
   const [llmIO, setLlmIO] = useState<{ pass: string; input: { system: string; user: string }; output: string }[]>([]);
   const [executing, setExecuting] = useState(false);
   const [execResults, setExecResults] = useState<ExecResult[] | null>(null);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  // Chat state
+  type ChatMsg = { role: 'user' | 'assistant'; content: string; plan?: any; executing?: boolean; results?: ExecResult[] };
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
   const [unmatchedView, setUnmatchedView] = useState<'grouped' | 'list'>('grouped');
   const [unmatchedSort, setUnmatchedSort] = useState<'date' | 'duration' | 'title'>('date');
   const [dcSearch, setDcSearch] = useState('');
@@ -442,83 +433,21 @@ export default function Assistant() {
     metaApi.picklist('Event', 'SE_Task_Type__c').then(r => setSeTaskTypes(r.data?.values ?? [])).catch(() => {});
   }, []);
 
-  async function handleRun() {
+  function handleRun() {
     if (!currentUser?.id) return;
     const { from, to } = resolveDateRange(datePreset, customFrom, customTo);
     if (!from || !to) return;
-
-    setStatus('loading');
     setConfirmRegenerate(false);
-    resetBriefing();
-    setError('');
-    setProgressLog([]);
-    setLlmIO([]);
     setExecResults(null);
-
-    try {
-      await assistantApi.briefing(
-        {
-          currentUserId: currentUser.id,
-          dateFrom: from, dateTo: to,
-          accountScope: accountScope.trim() || undefined,
-          calExclude: calExclude.trim() || undefined,
-          roleFilter: roleFilter.trim() || undefined,
-        },
-        (event) => {
-          if (event.type === 'llm_io') {
-            setLlmIO(prev => [...prev, { pass: event.pass, input: event.input, output: event.output }]);
-          } else if (event.type === 'debug') {
-            setProgressLog(prev => [...prev, { step: 'debug', message: event.message, debug: true }]);
-          } else if (event.type === 'progress') {
-            setProgressLog(prev => [...prev, { step: event.step, message: event.message }]);
-          } else if (event.type === 'result') {
-            const data = event as any as BriefingResult & { type: string };
-            setBriefingResultStore(data);
-
-            // Default: select all unlogged events that matched an account
-            const initSelected = new Set<string>();
-            const initOppMap: Record<string, string | null> = {};
-            const initDuration: Record<string, string> = {};
-            const initSplit: Record<string, string> = {};
-            const initDCSelected = new Set<string>();
-
-            data.accountGroups.forEach(g => {
-              // Default account: most-engaged sibling if present, else the matched account
-              const defaultAccountId = g.mostEngagedAccountId ?? g.accountId;
-              // Default opp: first opp that has a team DC (most DC activity), else top ranked
-              const defaultOpp = g.rankedOpps.find(o => o.hasTeamDC || o.hasMyDC) ?? g.rankedOpps[0];
-
-              g.unloggedEvents.forEach(e => {
-                const key = `${g.accountId}:${e.id}`;
-                initSelected.add(key);
-                initOppMap[key] = defaultOpp ? defaultOpp.oppId : `ACCOUNT:${defaultAccountId}`;
-                if (e.durationMins) initDuration[key] = String(e.durationMins);
-              });
-              g.dcGaps.forEach(d => {
-                initDCSelected.add(d.oppId);
-                initSplit[d.oppId] = String(d.suggestedSplitPct);
-              });
-            });
-
-            setSelectedEventsArr([...initSelected]);
-            setEventOppMap(initOppMap);
-            setEventDurationMap(initDuration);
-            setSelectedDCsArr([...initDCSelected]);
-            setDcSplit(initSplit);
-            setBriefingStatus('done');
-            setStatus('done');
-          } else if (event.type === 'error') {
-            setError(event.error ?? 'Unknown error');
-            setBriefingStatus('error');
-            setStatus('error');
-          }
-        }
-      );
-    } catch (e: any) {
-      setError(e.message ?? 'Request failed');
-      setBriefingStatus('error');
-      setStatus('error');
-    }
+    // Fire-and-forget — service writes directly to the store
+    startBriefing({
+      currentUserId: currentUser.id,
+      dateFrom: from, dateTo: to,
+      accountScope: accountScope.trim() || undefined,
+      calExclude: calExclude.trim() || undefined,
+      roleFilter: roleFilter.trim() || undefined,
+      lookbackMonths: dcLookbackMonths,
+    });
   }
 
   async function handleExecute() {
@@ -658,6 +587,54 @@ export default function Assistant() {
       }), dcs: [] });
       setLoggedUnmatchedKeys(prev => new Set([...prev, ...toLog.map(e => e.id)]));
     } catch { /* silent */ }
+  }
+
+  async function handleChatSend() {
+    if (!currentUser?.id || !chatInput.trim() || chatLoading) return;
+    const userMsg: ChatMsg = { role: 'user', content: chatInput.trim() };
+    const newMessages = [...chatMessages, userMsg];
+    setChatMessages(newMessages);
+    setChatInput('');
+    setChatLoading(true);
+
+    const briefingContext = result ? {
+      accounts: result.accountGroups.map(g => ({
+        accountId: g.accountId,
+        accountName: g.accountName,
+        opps: g.rankedOpps.map(o => ({ oppId: o.oppId, oppName: o.oppName, stage: o.stage, amount: o.amount })),
+      }))
+    } : undefined;
+
+    try {
+      const resp = await assistantApi.chat({
+        currentUserId: currentUser.id,
+        messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+        briefingContext,
+      });
+      const data = resp.data;
+      if (data.type === 'plan') {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.prose ?? '', plan: data.plan }]);
+      } else {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      }
+    } catch (e: any) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.response?.data?.error ?? e.message}` }]);
+    }
+    setChatLoading(false);
+  }
+
+  async function handleChatExecute(plan: any, msgIndex: number) {
+    if (!currentUser?.id) return;
+    setChatMessages(prev => prev.map((m, i) => i === msgIndex ? { ...m, executing: true } : m));
+    try {
+      const resp = await assistantApi.chatExecute({ currentUserId: currentUser.id, plan });
+      const results: ExecResult[] = resp.data.results;
+      setChatMessages(prev => prev.map((m, i) => i === msgIndex ? { ...m, executing: false, results } : m));
+    } catch (e: any) {
+      setChatMessages(prev => prev.map((m, i) => i === msgIndex
+        ? { ...m, executing: false, results: [{ type: 'error', name: 'Execute', action: 'error: ' + (e.response?.data?.error ?? e.message) }] }
+        : m));
+    }
   }
 
   const allDCGaps = result?.accountGroups.flatMap(g => g.dcGaps) ?? [];
@@ -827,8 +804,8 @@ export default function Assistant() {
         </div>
       </div>
 
-      {status === 'error' && error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700">{error}</div>
+      {status === 'error' && briefingError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700">{briefingError}</div>
       )}
 
       {/* Agent loading screen */}
@@ -863,21 +840,24 @@ export default function Assistant() {
           {/* Tabs */}
           <div className="flex items-center gap-0 border-b border-slate-200">
             {([
-              { key: 'activities', label: 'Activities to Log',        count: result.meta.unloggedCount,   color: 'blue' },
-              { key: 'dcs',        label: 'DC to Review',           count: result.meta.dcGapCount,      color: 'amber' },
-              { key: 'unmatched',  label: 'Other Activities to Review', count: result.meta.unmatchedCount, color: 'slate' },
+              { key: 'activities', label: 'Customer Activities',          count: result.meta.unloggedCount,   color: 'blue' },
+              { key: 'unmatched',  label: 'Other Activities',            count: result.meta.unmatchedCount,  color: 'slate' },
+              { key: 'dcs',        label: 'DC to Review',                count: result.meta.dcGapCount,      color: 'amber' },
+              { key: 'chat',       label: 'Chat',                        count: 0,                           color: 'violet' },
             ] as const).map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setResultTab(tab.key)}
-                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
                   resultTab === tab.key
-                    ? tab.color === 'blue'  ? 'border-blue-500 text-blue-600'
-                    : tab.color === 'amber' ? 'border-amber-500 text-amber-600'
-                    :                        'border-slate-500 text-slate-600'
+                    ? tab.color === 'blue'   ? 'border-blue-500 text-blue-600'
+                    : tab.color === 'amber'  ? 'border-amber-500 text-amber-600'
+                    : tab.color === 'violet' ? 'border-violet-500 text-violet-600'
+                    :                         'border-slate-500 text-slate-600'
                     : 'border-transparent text-slate-500 hover:text-slate-700'
                 }`}
               >
+                {tab.key === 'chat' && <Sparkles size={12} />}
                 {tab.label}
                 {tab.count > 0 && (
                   <span className={`ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full ${
@@ -961,11 +941,15 @@ export default function Assistant() {
               );
             }
 
-            // "Already engaged" = across the entire account hierarchy,
-            // I have a DC on at least one opp OR at least one logged activity
-            function isEngaged(d: DCGap): boolean {
+            function engagementLevel(d: DCGap): 'both' | 'dc' | 'activity' | 'historical' | 'none' {
               const allOpps = getHierarchyGroups(d.accountId).flatMap(g => g.rankedOpps);
-              return allOpps.some(o => o.hasMyDC) || allOpps.some(o => o.hasMyActivity);
+              const hasDC  = allOpps.some(o => o.hasMyDC);
+              const hasAct = allOpps.some(o => o.hasMyActivity);
+              if (hasDC && hasAct) return 'both';
+              if (hasDC)           return 'dc';
+              if (hasAct)          return 'activity';
+              if (d.isHistoricallyEngaged) return 'historical';
+              return 'none';
             }
 
             // Group by global parent name (fallback to accountName), then split engaged / other
@@ -981,26 +965,37 @@ export default function Assistant() {
 
             const visibleGaps = allDCGaps.filter(d => visibleDCOppIds.has(d.oppId));
 
-            const engagedGaps = visibleGaps.filter(isEngaged);
-            const otherGaps   = visibleGaps.filter(d => !isEngaged(d));
+            const engagedGaps  = visibleGaps.filter(d => engagementLevel(d) !== 'none');
+            const actOnlyGaps  = visibleGaps.filter(d => engagementLevel(d) === 'activity');
+            const otherGaps    = visibleGaps.filter(d => engagementLevel(d) === 'none');
 
-            const renderSection = (gaps: DCGap[]) => {
+            const engagementScore = (d: DCGap) => {
+              const level = engagementLevel(d);
+              return level === 'both' ? 3 : level === 'dc' ? 2 : level === 'activity' ? 1 : 0;
+            };
+
+            const renderSection = (gaps: DCGap[], sortEngagement = false) => {
               const byAccount = buildSections(gaps);
-              return [...byAccount.entries()].map(([groupKey, { displayName, accountName, gaps: sectionGaps }]) => (
-                <DCAccountCard
-                  key={groupKey}
-                  displayName={displayName}
-                  accountName={accountName !== displayName ? accountName : null}
-                  gaps={sectionGaps}
-                  selectedDCs={selectedDCs}
-                  setSelectedDCs={setSelectedDCs}
-                  dcSplit={dcSplit}
-                  setDcSplit={wrappedSetDcSplit}
-                  loggedDCKeys={loggedDCKeys}
-                  onLogOne={handleLogOneDC}
-                  onLogGroup={handleLogGroupDCs}
-                />
-              ));
+              return [...byAccount.entries()].map(([groupKey, { displayName, accountName, gaps: sectionGaps }]) => {
+                const sorted = sortEngagement
+                  ? [...sectionGaps].sort((a, b) => engagementScore(b) - engagementScore(a))
+                  : sectionGaps;
+                return (
+                  <DCAccountCard
+                    key={groupKey}
+                    displayName={displayName}
+                    accountName={accountName !== displayName ? accountName : null}
+                    gaps={sorted}
+                    selectedDCs={selectedDCs}
+                    setSelectedDCs={setSelectedDCs}
+                    dcSplit={dcSplit}
+                    setDcSplit={wrappedSetDcSplit}
+                    loggedDCKeys={loggedDCKeys}
+                    onLogOne={handleLogOneDC}
+                    onLogGroup={handleLogGroupDCs}
+                  />
+                );
+              });
             };
 
             return (
@@ -1019,18 +1014,24 @@ export default function Assistant() {
                   )}
                 </div>
 
-                {/* Section 1: already engaged */}
                 {engagedGaps.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">Already Engaged</span>
-                      <span className="text-[10px] text-slate-400">— you have a DC + activities on this account</span>
+                      <span className="text-[10px] text-slate-400">— you have a DC or activity on this account (current window or last {dcLookbackMonths}mo)</span>
                     </div>
-                    <div className="space-y-2">{renderSection(engagedGaps)}</div>
+                    <div className="space-y-2">{renderSection(engagedGaps, true)}</div>
                   </div>
                 )}
-
-                {/* Section 2: everything else */}
+                {actOnlyGaps.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Activity Only</span>
+                      <span className="text-[10px] text-slate-400">— you have logged activities but no DC on this account</span>
+                    </div>
+                    <div className="space-y-2">{renderSection(actOnlyGaps)}</div>
+                  </div>
+                )}
                 {otherGaps.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -1226,6 +1227,183 @@ export default function Assistant() {
           })()}
 
 
+          {/* Chat tab */}
+          {resultTab === 'chat' && (
+            <div className="flex flex-col" style={{ height: 560 }}>
+              {/* Message list */}
+              <div
+                className="flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm"
+                style={{ minHeight: 0 }}
+              >
+                {chatMessages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                    >
+                      <Sparkles size={20} className="text-white" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Ask Orbi to create records</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                        e.g. "Log 30 hours of activities for Sysco spread over the next 2 weeks as demo build work"
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1.5 w-full max-w-xs">
+                      {[
+                        'Create activities for Sysco for 20h of demo build over 2 weeks',
+                        'Add a DC for the top Westrock opportunity at 25% split',
+                        'Log 5 hours of discovery calls for Emerson this week',
+                      ].map(hint => (
+                        <button
+                          key={hint}
+                          onClick={() => setChatInput(hint)}
+                          className="text-left text-xs px-3 py-2 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-slate-600 transition-colors"
+                        >
+                          {hint}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'assistant' && (
+                      <div
+                        className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center mt-0.5"
+                        style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                      >
+                        <Sparkles size={13} className="text-white" />
+                      </div>
+                    )}
+                    <div className={`max-w-[80%] flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      {msg.content && (
+                        <div
+                          className={`text-xs rounded-2xl px-3.5 py-2.5 leading-relaxed ${
+                            msg.role === 'user'
+                              ? 'bg-violet-600 text-white rounded-tr-sm'
+                              : 'bg-slate-100 text-slate-800 rounded-tl-sm'
+                          }`}
+                        >
+                          {msg.content}
+                        </div>
+                      )}
+
+                      {/* Plan preview card */}
+                      {msg.plan && !msg.results && (
+                        <div className="bg-white border border-violet-200 rounded-xl overflow-hidden shadow-sm w-full">
+                          <div className="px-3 py-2 bg-violet-50 border-b border-violet-100 flex items-center gap-2">
+                            <Sparkles size={12} className="text-violet-600" />
+                            <span className="text-xs font-semibold text-violet-800">Proposed plan</span>
+                            <span className="ml-auto text-[10px] text-violet-500">{msg.plan.activities?.length ?? 0} activities</span>
+                          </div>
+                          <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
+                            {(msg.plan.activities ?? []).map((act: any, ai: number) => (
+                              <div key={ai} className="px-3 py-2 flex items-center gap-2 text-xs">
+                                <CalendarDays size={11} className="text-slate-400 shrink-0" />
+                                <span className="flex-1 text-slate-700 truncate">{act.summary}</span>
+                                <span className="text-slate-400 shrink-0">{act.date ?? act.startDate}</span>
+                                {act.durationMins && (
+                                  <span className="text-slate-500 shrink-0 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {fmtDuration(act.durationMins)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {(msg.plan.dealContributions ?? []).map((dc: any, di: number) => (
+                              <div key={`dc-${di}`} className="px-3 py-2 flex items-center gap-2 text-xs bg-amber-50/30">
+                                <Building2 size={11} className="text-amber-500 shrink-0" />
+                                <span className="flex-1 text-slate-700 truncate">{dc.oppName ?? dc.oppId}</span>
+                                <span className="text-amber-600 shrink-0">{dc.role}</span>
+                                {dc.splitPct && (
+                                  <span className="text-slate-500 shrink-0 bg-amber-100 px-1.5 py-0.5 rounded">{dc.splitPct}%</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-3 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center gap-2">
+                            <button
+                              onClick={() => handleChatExecute(msg.plan, i)}
+                              disabled={msg.executing}
+                              className="flex items-center gap-1.5 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-60 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              {msg.executing
+                                ? <><Loader2 size={11} className="animate-spin" /> Creating…</>
+                                : <><LogIn size={11} /> Confirm & Create</>}
+                            </button>
+                            <button
+                              onClick={() => setChatMessages(prev => prev.map((m, mi) => mi === i ? { ...m, plan: null, content: m.content + '\n\n_(Cancelled)_' } : m))}
+                              disabled={msg.executing}
+                              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Execution results */}
+                      {msg.results && (
+                        <div className="w-full rounded-xl overflow-hidden border border-slate-200">
+                          {msg.results.map((r, ri) => {
+                            const isErr = r.action.startsWith('error');
+                            return (
+                              <div key={ri} className={`flex items-center gap-2 px-3 py-2 text-xs ${isErr ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                <span className="flex-1 truncate">{r.name}</span>
+                                <span className="font-medium shrink-0">{isErr ? r.action : `✓ ${r.action}`}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex gap-2.5 justify-start">
+                    <div
+                      className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                    >
+                      <Sparkles size={13} className="text-white" />
+                    </div>
+                    <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-3.5 py-2.5 flex items-center gap-1.5">
+                      {[0, 1, 2].map(i => (
+                        <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400"
+                          style={{ animation: `pulse-dot 1.2s ease-in-out ${i * 0.15}s infinite` }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input row */}
+              <div className="mt-2 flex items-end gap-2">
+                <div className="flex-1 relative">
+                  <textarea
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                    placeholder="Ask Orbi to create activities, DCs, or anything else…"
+                    rows={2}
+                    className="w-full resize-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 transition-all"
+                    style={{ lineHeight: '1.5' }}
+                  />
+                </div>
+                <button
+                  onClick={handleChatSend}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-all disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                >
+                  <Send size={15} className="text-white" />
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1 text-center">Enter to send · Shift+Enter for new line</p>
+            </div>
+          )}
+
           {execResults && (
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
               <p className="text-sm font-semibold text-slate-700 mb-2">Results</p>
@@ -1253,7 +1431,7 @@ function DCAccountCard({ displayName, accountName, gaps, selectedDCs, setSelecte
   onLogGroup: (gaps: DCGap[]) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [loggingOne, setLoggingOne] = useState<string | null>(null);
+  const [loggingOnes, setLoggingOnes] = useState<Set<string>>(new Set());
   const [loggingGroup, setLoggingGroup] = useState(false);
   const [groupSplit, setGroupSplit] = useState('');
 
@@ -1383,11 +1561,15 @@ function DCAccountCard({ displayName, accountName, gaps, selectedDCs, setSelecte
                             className="w-14 h-6 px-1.5 rounded border border-slate-200 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
                         </div>
                         <button
-                          onClick={async () => { setLoggingOne(d.oppId); await onLogOne(d); setLoggingOne(null); }}
-                          disabled={loggingOne === d.oppId}
+                          onClick={async () => {
+                            setLoggingOnes(prev => new Set([...prev, d.oppId]));
+                            await onLogOne(d);
+                            setLoggingOnes(prev => { const n = new Set(prev); n.delete(d.oppId); return n; });
+                          }}
+                          disabled={loggingOnes.has(d.oppId)}
                           className="ml-auto flex items-center gap-1 text-[10px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-2.5 py-1 rounded-lg transition-colors"
                         >
-                          {loggingOne === d.oppId ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
+                          {loggingOnes.has(d.oppId) ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
                           Log
                         </button>
                       </div>
@@ -1420,11 +1602,24 @@ function RelatedToSearch({ value, onChange, currentUserId }: {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLDivElement>(null);
 
+  function getDropdownStyle(): React.CSSProperties {
+    if (!inputRef.current) return { position: 'fixed', top: 0, left: 0, width: 300, zIndex: 9999 };
+    const rect = inputRef.current.getBoundingClientRect();
+    return { position: 'fixed', top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex: 9999 };
+  }
+
   const search = useCallback((q: string) => {
     if (q.length < 2) { setResults([]); setOpen(false); return; }
     setLoading(true);
     activitiesApi.searchRelated({ q, ...(currentUserId ? { currentUserId } : {}) })
-      .then(r => { setResults(r.data.results ?? []); setOpen(true); })
+      .then(r => {
+        const res = r.data.results ?? [];
+        setResults(res);
+        if (res.length > 0) {
+          setDropdownStyle(getDropdownStyle());
+          setOpen(true);
+        }
+      })
       .catch(() => setResults([]))
       .finally(() => setLoading(false));
   }, [currentUserId]);
@@ -1434,20 +1629,6 @@ function RelatedToSearch({ value, onChange, currentUserId }: {
     debounceRef.current = setTimeout(() => search(query), 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query, search]);
-
-  // Position dropdown using fixed coords to escape overflow-hidden parents
-  useEffect(() => {
-    if (open && inputRef.current) {
-      const rect = inputRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        position: 'fixed',
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-        zIndex: 9999,
-      });
-    }
-  }, [open]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1491,7 +1672,7 @@ function RelatedToSearch({ value, onChange, currentUserId }: {
         {loading && <Loader2 size={9} className="animate-spin text-slate-400 shrink-0" />}
       </div>
       {open && results.length > 0 && (
-        <div style={dropdownStyle} className="bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+        <div style={getDropdownStyle()} className="bg-white border border-slate-200 rounded-lg shadow-xl max-h-56 overflow-y-auto">
           {results.map((r: any) => (
             <button
               key={r.id}
@@ -1542,7 +1723,8 @@ function UnmatchedGroupCard({
   onLogGroup: (events: UnmatchedEvent[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [logging, setLogging] = useState<string | null>(null);
+  const [loggingOnes, setLoggingOnes] = useState<Set<string>>(new Set());
+  const [loggingGroup, setLoggingGroup] = useState(false);
   const totalMins = events.reduce((s, e) => s + (e.durationMins ?? 0), 0);
 
   const groupSuggestedType = (() => {
@@ -1575,15 +1757,15 @@ function UnmatchedGroupCard({
   }
 
   async function logGroup() {
-    setLogging('group');
+    setLoggingGroup(true);
     await onLogGroup(events);
-    setLogging(null);
+    setLoggingGroup(false);
   }
 
   async function logOne(e: UnmatchedEvent) {
-    setLogging(e.id);
+    setLoggingOnes(prev => new Set([...prev, e.id]));
     await onLogOne(e);
-    setLogging(null);
+    setLoggingOnes(prev => { const n = new Set(prev); n.delete(e.id); return n; });
   }
 
   return (
@@ -1640,10 +1822,10 @@ function UnmatchedGroupCard({
             {pendingEvents.length > 0 && (
               <button
                 onClick={e => { e.stopPropagation(); logGroup(); }}
-                disabled={logging === 'group'}
+                disabled={loggingGroup}
                 className="flex items-center gap-1 text-[10px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-2.5 py-1 rounded-lg transition-colors"
               >
-                {logging === 'group' ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
+                {loggingGroup ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
                 Log {pendingEvents.length} selected
               </button>
             )}
@@ -1703,10 +1885,10 @@ function UnmatchedGroupCard({
                         )}
                         <button
                           onClick={() => logOne(e)}
-                          disabled={logging === e.id}
+                          disabled={loggingOnes.has(e.id)}
                           className="ml-auto flex items-center gap-1 text-[10px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-2.5 py-1 rounded-lg transition-colors"
                         >
-                          {logging === e.id ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
+                          {loggingOnes.has(e.id) ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
                           Log
                         </button>
                       </div>
@@ -1753,7 +1935,7 @@ function AccountCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showLogged, setShowLogged] = useState(false);
-  const [loggingOne, setLoggingOne] = useState<string | null>(null);
+  const [loggingOnes, setLoggingOnes] = useState<Set<string>>(new Set());
   const [loggingGroup, setLoggingGroup] = useState(false);
   // per-group task type (applies to all unlogged events in this group unless individually overridden)
   const [groupTaskType, setGroupTaskType] = useState('');
@@ -1966,11 +2148,15 @@ function AccountCard({
                               </div>
                             )}
                             <button
-                              onClick={async () => { setLoggingOne(e.id); await onLogOne(e); setLoggingOne(null); }}
-                              disabled={loggingOne === e.id}
+                              onClick={async () => {
+                                setLoggingOnes(prev => new Set([...prev, e.id]));
+                                await onLogOne(e);
+                                setLoggingOnes(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                              }}
+                              disabled={loggingOnes.has(e.id)}
                               className="ml-auto flex items-center gap-1 text-[10px] font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-2.5 py-1 rounded-lg transition-colors"
                             >
-                              {loggingOne === e.id ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
+                              {loggingOnes.has(e.id) ? <Loader2 size={10} className="animate-spin" /> : <LogIn size={10} />}
                               Log
                             </button>
                           </div>

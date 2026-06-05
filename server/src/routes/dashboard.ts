@@ -84,15 +84,10 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // ── 4. Travel approvals + customer hours ─────────────────────────────────
-    const travelClauses = ['IsDeleted = false'];
-    if (dateFrom) travelClauses.push(`Travel_Start_Date__c >= ${dateFrom}`);
-    if (dateTo) travelClauses.push(`Travel_Start_Date__c <= ${dateTo}`);
-    ownershipClauses({ ownerRolePattern, ownerName, justMyData, currentUserId }).forEach(c => travelClauses.push(c));
+    // ── 4. Active DSRs + customer hours ──────────────────────────────────────
+    const dsrClauses = [`Status__c NOT IN ('Closed','Cancelled')`];
+    if (currentUserId) dsrClauses.push(`OwnerId = '${currentUserId}'`);
 
-    // Customer-related hours: Events owned by the user, in the date range,
-    // logged against an account or opp (WhatId != null).
-    // Use OwnerId subquery for name/role filters — avoids the 100k who/what limit.
     const custHoursClauses = ['WhatId != null'];
     if (currentUserId && (justMyData === 'true' || (!ownerName && !ownerRolePattern))) {
       custHoursClauses.push(`OwnerId = '${currentUserId}'`);
@@ -106,19 +101,19 @@ router.get('/', async (req, res) => {
     if (dateFrom) custHoursClauses.push(`StartDateTime >= ${dateFrom}T00:00:00Z`);
     if (dateTo)   custHoursClauses.push(`StartDateTime <= ${dateTo}T23:59:59Z`);
 
-    const [travelResult, custHoursResult] = await Promise.all([
+    const [dsrResult, custHoursResult] = await Promise.all([
       conn.query(
-        `SELECT Id, Name, Approval_Status__c, Travel_Start_Date__c, Travel_End_Date__c, ` +
-        `Total_Cost__c, OwnerId, Owner.Name ` +
-        `FROM Travel_Approval__c WHERE ${travelClauses.join(' AND ')} ` +
-        `ORDER BY Travel_Start_Date__c DESC NULLS LAST LIMIT ${limitNum}`
+        `SELECT Id, Name, Status__c, Status_Detail__c, Oppty_Account__c, Opportunity__c, ` +
+        `Opportunity__r.Name, Oppty_Amount__c, Oppty_Close_Date__c ` +
+        `FROM Deal_Support_Request__c WHERE ${dsrClauses.join(' AND ')} ` +
+        `ORDER BY Oppty_Close_Date__c ASC NULLS LAST LIMIT ${limitNum}`
       ),
       conn.query(
         `SELECT SUM(DurationInMinutes) totalMins FROM Event WHERE ${custHoursClauses.join(' AND ')}`
       ),
     ]);
 
-    const travelApprovals = travelResult.records as any[];
+    const activeDSRs = dsrResult.records as any[];
     const customerHours = Math.round(((custHoursResult.records[0] as any)?.totalMins ?? 0) / 60 * 10) / 10;
 
     // ── 5. Stats ──────────────────────────────────────────────────────────────
@@ -134,7 +129,7 @@ router.get('/', async (req, res) => {
     }
 
     const stats = {
-      travelCount: travelResult.totalSize,
+      dsrCount: dsrResult.totalSize,
       dcCount: matchedOppIds.length,
       totalSplitAmount,
       totalOppAmount,
@@ -176,7 +171,7 @@ router.get('/', async (req, res) => {
       return (maxB ?? 0) - (maxA ?? 0);
     });
 
-    res.json({ stats, travelApprovals, accountOpps });
+    res.json({ stats, activeDSRs, accountOpps });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

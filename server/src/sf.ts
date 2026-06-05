@@ -20,12 +20,19 @@ function getTokenFromCli(): { accessToken: string; instanceUrl: string } | null 
 }
 
 export function getConnection(): SfConnection {
-  if (!_conn) {
-    // Try CLI first (always fresh), fall back to .env token
-    const cli = getTokenFromCli();
+  // Always fetch a fresh token from the CLI — it handles refresh transparently
+  const cli = getTokenFromCli();
+  if (cli && (_conn === null || (_conn as any).accessToken !== cli.accessToken)) {
     _conn = new jsforce.Connection({
-      instanceUrl: cli?.instanceUrl ?? process.env.SF_INSTANCE_URL,
-      accessToken: cli?.accessToken ?? process.env.SF_ACCESS_TOKEN,
+      instanceUrl: cli.instanceUrl,
+      accessToken: cli.accessToken,
+      version: '62.0',
+    });
+  }
+  if (!_conn) {
+    _conn = new jsforce.Connection({
+      instanceUrl: process.env.SF_INSTANCE_URL,
+      accessToken: process.env.SF_ACCESS_TOKEN,
       version: '62.0',
     });
   }

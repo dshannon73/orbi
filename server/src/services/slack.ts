@@ -1,5 +1,36 @@
 import { App, ExpressReceiver } from '@slack/bolt';
 import { getConnection } from '../sf';
+import { spawn } from 'child_process';
+
+const CLAUDE_PATH = '/Users/dshannon/.local/bin/claude';
+const CLAUDE_ENV = { ...process.env, PATH: `${process.env.PATH}:/Users/dshannon/.local/bin` };
+
+function runClaude(prompt: string, timeoutMs = 60_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(CLAUDE_PATH, ['--print', '--dangerously-skip-permissions', '--output-format', 'text'], {
+      env: CLAUDE_ENV,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error('claude subprocess timed out'));
+    }, timeoutMs);
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`claude exited ${code}: ${stderr.trim()}`));
+      resolve(stdout.trim());
+    });
+
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+  });
+}
 
 export function createSlackReceiver() {
   const receiver = new ExpressReceiver({
@@ -12,7 +43,6 @@ export function createSlackReceiver() {
     receiver,
   });
 
-  // /sf-tasks [userId]
   app.command('/sf-tasks', async ({ command, ack, respond }) => {
     await ack();
     try {
@@ -29,7 +59,6 @@ export function createSlackReceiver() {
     }
   });
 
-  // /sf-travel [status]
   app.command('/sf-travel', async ({ command, ack, respond }) => {
     await ack();
     try {
@@ -49,7 +78,6 @@ export function createSlackReceiver() {
     }
   });
 
-  // /sf-opps [ownerId]
   app.command('/sf-opps', async ({ command, ack, respond }) => {
     await ack();
     try {
@@ -69,13 +97,22 @@ export function createSlackReceiver() {
   return receiver.router;
 }
 
-export async function postToSlack(channel: string, text: string) {
-  const token = process.env.SLACK_BOT_TOKEN;
-  if (!token) throw new Error('SLACK_BOT_TOKEN not set');
-  const resp = await fetch('https://slack.com/api/chat.postMessage', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel, text }),
-  });
-  return resp.json();
+export async function postToSlack(channelName: string, text: string) {
+  const prompt = [
+    `Use the slack_search_channels tool to find the channel "${channelName.replace(/^#/, '')}",`,
+    `then use slack_send_message to send this message to it:`,
+    text,
+    `Return only "ok" when done.`,
+  ].join('\n');
+
+  const output = await runClaude(prompt);
+  return { ok: true, response: output };
+}
+
+export async function createCanvas(title: string, prompt: string): Promise<string> {
+  // prompt is the full instruction including data — Claude formats and creates the canvas
+  const output = await runClaude(prompt, 120_000);
+  const url = output.match(/https:\/\/\S+\.slack\.com\/docs\/\S+/)?.[0];
+  if (!url) throw new Error(`No canvas URL in response: ${output.slice(0, 300)}`);
+  return url;
 }

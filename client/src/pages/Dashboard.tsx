@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, Plane, Briefcase, Building2, ChevronDown, ChevronUp, Activity, Clock, ArrowRight } from 'lucide-react';
+import { TrendingUp, Briefcase, Building2, ChevronDown, ChevronUp, Activity, ArrowRight, FileSearch } from 'lucide-react';
 import { dashboardApi } from '@/api';
 import { Badge, statusVariant } from '@/components/ui/badge';
-import { fmt$, fmtDate } from '@/lib/utils';
+import { fmt$, fmtCompact$, fmtDate } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { usePageFilters } from '@/store/pageFilters';
@@ -208,7 +208,7 @@ export default function Dashboard() {
 
   const d = data?.data;
   const stats = d?.stats ?? {};
-  const travelApprovals: any[] = d?.travelApprovals ?? [];
+  const activeDSRs: any[] = d?.activeDSRs ?? [];
   const accountOpps: any[] = d?.accountOpps ?? [];
 
   const inputClass = "h-8 px-3 rounded-lg border text-[12px] text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-slate-300 transition-shadow"
@@ -281,27 +281,27 @@ export default function Dashboard() {
         <StatCard
           label="Open DC Opps"
           value={isLoading ? '—' : (stats.dcCount ?? '—')}
-          sub={stats.totalSplitAmount > 0 ? `${fmt$(stats.totalSplitAmount)} my split` : undefined}
+          sub={stats.totalSplitAmount > 0 ? `${fmtCompact$(stats.totalSplitAmount)} my split` : undefined}
           accent="amber"
           loading={isLoading}
         />
         <StatCard
           label="Total Opp Amount"
-          value={isLoading ? '—' : fmt$(stats.totalOppAmount)}
+          value={isLoading ? '—' : fmtCompact$(stats.totalOppAmount)}
           sub="open opps w/ my DC"
           accent="slate"
           loading={isLoading}
         />
         <StatCard
           label="DC Split Amount"
-          value={isLoading ? '—' : fmt$(stats.totalSplitAmount)}
+          value={isLoading ? '—' : fmtCompact$(stats.totalSplitAmount)}
           sub="my split across opps"
           accent="green"
           loading={isLoading}
         />
         <StatCard
-          label="Travel Approvals"
-          value={isLoading ? '—' : (stats.travelCount ?? '—')}
+          label="Active DSRs"
+          value={isLoading ? '—' : (stats.dsrCount ?? '—')}
           accent="violet"
           loading={isLoading}
         />
@@ -309,12 +309,12 @@ export default function Dashboard() {
 
       {/* Bottom two panels */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Travel */}
+        {/* Active DSRs */}
         <SectionCard
-          title="Travel Approvals"
+          title="Active DSRs"
           action={
             <button
-              onClick={() => navigate('/travel-approvals')}
+              onClick={() => navigate('/dsr')}
               className="flex items-center gap-1 text-[11px] font-medium transition-colors hover:opacity-70"
               style={{ color: '#d97706' }}
             >
@@ -328,20 +328,29 @@ export default function Dashboard() {
                 {[1,2,3].map(i => <div key={i} className="h-8 rounded shimmer" />)}
               </div>
             )}
-            {!isLoading && travelApprovals.length === 0 && (
-              <p className="px-5 py-8 text-[13px] text-slate-400 text-center">No travel approvals</p>
+            {!isLoading && activeDSRs.length === 0 && (
+              <p className="px-5 py-8 text-[13px] text-slate-400 text-center">No active DSRs</p>
             )}
-            {travelApprovals.map((t: any) => (
+            {activeDSRs.map((d: any) => (
               <div
-                key={t.Id}
-                className="px-5 py-3 flex items-center gap-3 transition-colors hover:bg-[#fafaf7]"
+                key={d.Id}
+                className="px-5 py-3 flex items-center gap-3 transition-colors hover:bg-[#fafaf7] cursor-pointer"
                 style={{ borderBottom: '1px solid #f5f2ec' }}
+                onClick={() => navigate('/dsr')}
               >
-                <Badge variant={statusVariant(t.Approval_Status__c)}>{t.Approval_Status__c ?? '—'}</Badge>
-                <span className="flex-1 text-[13px] font-medium text-slate-800 truncate">{t.Name}</span>
-                <span className="text-[11px] text-slate-400 tabular shrink-0">{fmtDate(t.Travel_Start_Date__c)}</span>
-                {t.Total_Cost__c != null && (
-                  <span className="text-[12px] tabular text-slate-600 font-medium shrink-0">{fmt$(t.Total_Cost__c)}</span>
+                <FileSearch size={13} className="text-slate-300 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-slate-800">{d.Name}</span>
+                    <Badge variant={statusVariant(d.Status__c)}>{d.Status__c}</Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">{d.Oppty_Account__c ?? '—'} · {d.Opportunity__r?.Name ?? '—'}</p>
+                </div>
+                {d.Oppty_Amount__c != null && (
+                  <span className="text-[12px] tabular text-slate-600 font-medium shrink-0">{fmtCompact$(d.Oppty_Amount__c)}</span>
+                )}
+                {d.Oppty_Close_Date__c && (
+                  <span className="text-[11px] text-slate-400 tabular shrink-0">{fmtDate(d.Oppty_Close_Date__c)}</span>
                 )}
               </div>
             ))}

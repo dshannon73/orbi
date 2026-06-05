@@ -1,14 +1,15 @@
 import { Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard, CheckSquare, Briefcase, Building2,
-  Users, Plane, TrendingUp, UserCircle, LogOut, Calendar, Sparkles,
+  Users, Plane, TrendingUp, UserCircle, LogOut, Calendar, Sparkles, Hash, TerminalSquare, FileSearch,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { authApi } from '@/api';
 import { useUserPrefs } from '@/store/userPrefs';
 import { useFilters } from '@/store/filters';
 import { useAssistantFilters } from '@/store/assistant';
+import { useTerminalStore } from '@/store/terminal';
 import { AuthGuard } from '@/components/AuthGuard';
 import Activities from '@/pages/Activities';
 import DealContributions from '@/pages/DealContributions';
@@ -21,18 +22,27 @@ import Profile from '@/pages/Profile';
 import Login from '@/pages/Login';
 import CalendarPage from '@/pages/Calendar';
 import Assistant from '@/pages/Assistant';
+import SlackPage from '@/pages/SlackSend';
+import TerminalPage from '@/pages/Terminal';
+import TerminalPanel from '@/components/TerminalPanel';
+import DSRReview from '@/pages/DSRReview';
 import { cn } from '@/lib/utils';
+
+const PANEL_STORAGE_KEY = 'orbi-terminal-panel-open';
 
 const nav = [
   { to: '/',                   label: 'Dashboard',         icon: LayoutDashboard },
   { to: '/assistant',          label: 'Orbi Agent',        icon: Sparkles },
   { to: '/activities',         label: 'Activities',        icon: CheckSquare },
   { to: '/deal-contributions', label: 'Deal Contributions',icon: Briefcase },
+  { to: '/dsr',                 label: 'DSR Review',         icon: FileSearch },
   { to: '/accounts',           label: 'Accounts',          icon: Building2 },
   { to: '/opportunities',      label: 'Opportunities',     icon: TrendingUp },
   { to: '/calendar',           label: 'Calendar',          icon: Calendar },
   { to: '/users',              label: 'Users',             icon: Users },
   { to: '/travel-approvals',   label: 'Travel Approvals',  icon: Plane },
+  { to: '/slack',              label: 'Slack',             icon: Hash },
+  { to: '/terminal',           label: 'Terminal',          icon: TerminalSquare },
   { to: '/profile',            label: 'Profile',           icon: UserCircle },
 ];
 
@@ -43,6 +53,8 @@ function MainLayout() {
   const { defaultRoleFilter } = useUserPrefs();
   const { ownerRolePattern, setOwnerRolePattern } = useFilters();
   const { roleFilter, setRoleFilter } = useAssistantFilters();
+
+  const { panelOpen, setPanelOpen } = useTerminalStore();
 
   useEffect(() => {
     if (!ownerRolePattern && defaultRoleFilter) setOwnerRolePattern(defaultRoleFilter);
@@ -57,6 +69,36 @@ function MainLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+      {/* Toggle button — fixed to right edge of viewport, vertically centered */}
+      <button
+        onClick={() => setPanelOpen(!panelOpen)}
+        title={panelOpen ? 'Close terminal panel' : 'Open terminal panel'}
+        style={{
+          position: 'fixed',
+          right: panelOpen ? 420 : 0,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 40,
+          width: 20,
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#0e0d1a',
+          border: '1px solid #1e1e2e',
+          borderRight: 'none',
+          borderRadius: '6px 0 0 6px',
+          cursor: 'pointer',
+          transition: 'right 0.2s ease',
+          padding: 0,
+        }}
+      >
+        <TerminalSquare
+          size={13}
+          style={{ color: panelOpen ? '#f59e0b' : '#4a4860' }}
+        />
+      </button>
+
       {/* Sidebar */}
       <aside
         className="w-52 flex flex-col shrink-0"
@@ -156,25 +198,55 @@ function MainLayout() {
       </aside>
 
       {/* Main content area */}
-      <main className="flex-1 overflow-y-auto">
-        <div
-          key={location.pathname}
-          className="max-w-screen-2xl mx-auto px-7 py-7 page-enter"
-        >
-          <Routes>
-            <Route path="/"                   element={<Dashboard />} />
-            <Route path="/activities"         element={<Activities />} />
-            <Route path="/opportunities"      element={<Opportunities />} />
-            <Route path="/deal-contributions" element={<DealContributions />} />
-            <Route path="/accounts"           element={<Accounts />} />
-            <Route path="/users"              element={<UsersList />} />
-            <Route path="/travel-approvals"   element={<TravelApprovals />} />
-            <Route path="/calendar"           element={<CalendarPage />} />
-            <Route path="/assistant"          element={<Assistant />} />
-            <Route path="/profile"            element={<Profile />} />
-          </Routes>
-        </div>
+      <main className="flex-1 overflow-hidden flex flex-col">
+        <Routes>
+          {/* Terminal gets the full height without padding */}
+          <Route path="/terminal" element={<TerminalPage />} />
+          {/* All other routes get the standard padded wrapper */}
+          <Route
+            path="/*"
+            element={
+              <div className="flex-1 overflow-y-auto">
+                <div
+                  key={location.pathname}
+                  className="max-w-screen-2xl mx-auto px-7 py-7 page-enter"
+                >
+                  <Routes>
+                    <Route path="/"                   element={<Dashboard />} />
+                    <Route path="/activities"         element={<Activities />} />
+                    <Route path="/opportunities"      element={<Opportunities />} />
+                    <Route path="/deal-contributions" element={<DealContributions />} />
+                    <Route path="/accounts"           element={<Accounts />} />
+                    <Route path="/users"              element={<UsersList />} />
+                    <Route path="/travel-approvals"   element={<TravelApprovals />} />
+                    <Route path="/calendar"           element={<CalendarPage />} />
+                    <Route path="/assistant"          element={<Assistant />} />
+                    <Route path="/slack"              element={<SlackPage />} />
+                    <Route path="/dsr"                element={<DSRReview />} />
+                    <Route path="/profile"            element={<Profile />} />
+                  </Routes>
+                </div>
+              </div>
+            }
+          />
+        </Routes>
       </main>
+
+      {/* Right panel — collapsible terminal */}
+      <div
+        style={{
+          width: panelOpen ? 420 : 0,
+          minWidth: panelOpen ? 420 : 0,
+          transition: 'width 0.2s ease, min-width 0.2s ease',
+          overflow: 'hidden',
+          borderLeft: panelOpen ? '1px solid #1e1e2e' : 'none',
+          background: '#0d0d0d',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {panelOpen && <TerminalPanel mode="panel" />}
+      </div>
     </div>
   );
 }

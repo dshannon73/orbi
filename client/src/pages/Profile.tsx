@@ -33,7 +33,9 @@ export default function Profile() {
   const {
     defaultRecordTypeId, defaultRecordTypeName,
     defaultSeTaskType, defaultRoleFilter,
+    dcLookbackMonths,
     setDefaultRecordType, setDefaultSeTaskType, setDefaultRoleFilter,
+    setDcLookbackMonths,
   } = useUserPrefs();
 
   const { data: rtData } = useQuery({
@@ -191,6 +193,25 @@ export default function Profile() {
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1.5">
+                    DC Lookback Window
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={dcLookbackMonths}
+                      onChange={e => setDcLookbackMonths(Math.max(1, Math.min(60, parseInt(e.target.value) || 24)))}
+                      className={inputClass}
+                      style={{ ...inputStyle, width: 80 }}
+                    />
+                    <span className="text-[12px] text-slate-500">months</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">Accounts with DC or Activity in this window count as "Already Engaged"</p>
                 </div>
 
                 <div className="sm:col-span-2">

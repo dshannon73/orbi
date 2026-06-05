@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import FileStore from 'session-file-store';
 import authRouter from './routes/auth';
 import activitiesRouter from './routes/activities';
 import dealContributionsRouter from './routes/dealContributions';
@@ -14,19 +15,23 @@ import metaRouter from './routes/meta';
 import calendarRouter from './routes/calendar';
 import assistantRouter from './routes/assistant';
 import dashboardRouter from './routes/dashboard';
+import terminalRouter from './routes/terminal';
+import dsrRouter from './routes/dsr';
 import { createSlackReceiver } from './services/slack';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-app.use(express.json());
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json({ limit: '2mb' }));
 
+const SessionFileStore = FileStore(session);
 app.use(session({
+  store: new SessionFileStore({ path: './.sessions', ttl: 365 * 24 * 60 * 60, reapInterval: 3600 }),
   secret: process.env.SESSION_SECRET || 'org62-dev-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 }, // 30 days
+  cookie: { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000 }, // 1 year
 }));
 
 app.use('/api/auth', authRouter);
@@ -41,6 +46,8 @@ app.use('/api/meta', metaRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/assistant', assistantRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/terminal', terminalRouter);
+app.use('/api/dsr', dsrRouter);
 
 if (process.env.SLACK_SIGNING_SECRET && process.env.SLACK_BOT_TOKEN) {
   app.use(createSlackReceiver());
