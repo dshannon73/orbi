@@ -1434,8 +1434,8 @@ router.post('/chat', async (req, res) => {
 
     // Fetch user's default record type + task types
     const [rtRes, metaRes] = await Promise.all([
-      conn.query(`SELECT Id FROM RecordType WHERE SobjectType = 'Event' AND IsActive = true AND Name = 'Solutions Event' LIMIT 1`).catch(() => ({ records: [] })),
-      conn.query(`SELECT SE_Task_Type__c FROM Event WHERE OwnerId = '${currentUserId}' AND SE_Task_Type__c != null GROUP BY SE_Task_Type__c LIMIT 10`).catch(() => ({ records: [] })),
+      conn.query(`SELECT Id FROM RecordType WHERE SobjectType = 'Event' AND IsActive = true AND Name = 'Solutions Event' LIMIT 1`).catch(() => ({ records: [], done: true, totalSize: 0 })),
+      conn.query(`SELECT SE_Task_Type__c FROM Event WHERE OwnerId = '${currentUserId}' AND SE_Task_Type__c != null GROUP BY SE_Task_Type__c LIMIT 10`).catch(() => ({ records: [], done: true, totalSize: 0 })),
     ]);
     const defaultRTId = (rtRes.records[0] as any)?.Id ?? null;
     const taskTypes = [...new Set((metaRes.records as any[]).map(r => r.SE_Task_Type__c).filter(Boolean))];
@@ -1455,8 +1455,8 @@ router.post('/chat', async (req, res) => {
       // Search SF for accounts + opps matching candidate names not in scope
       const nameFilter = candidateNames.slice(0, 5).map(n => `Name LIKE '%${n.replace(/'/g, "\\'")}%'`).join(' OR ');
       const [accRes, oppRes] = await Promise.all([
-        conn.query(`SELECT Id, Name FROM Account WHERE ${nameFilter} AND IsDeleted = false ORDER BY LastModifiedDate DESC LIMIT 10`).catch(() => ({ records: [] })),
-        conn.query(`SELECT Id, Name, AccountId, Account.Name, StageName, Amount FROM Opportunity WHERE (${nameFilter}) AND IsClosed = false ORDER BY CloseDate ASC LIMIT 10`).catch(() => ({ records: [] })),
+        conn.query(`SELECT Id, Name FROM Account WHERE ${nameFilter} AND IsDeleted = false ORDER BY LastModifiedDate DESC LIMIT 10`).catch(() => ({ records: [], done: true, totalSize: 0 })),
+        conn.query(`SELECT Id, Name, AccountId, Account.Name, StageName, Amount FROM Opportunity WHERE (${nameFilter}) AND IsClosed = false ORDER BY CloseDate ASC LIMIT 10`).catch(() => ({ records: [], done: true, totalSize: 0 })),
       ]);
       const accLines = (accRes.records as any[]).map(a => `- Account: ${a.Name} (id:${a.Id})`);
       const oppLines = (oppRes.records as any[]).map(o => `- Opp: ${o.Name} [${o.StageName}, $${Math.round((o.Amount ?? 0) / 1000)}k, id:${o.Id}] on ${(o as any).Account?.Name ?? 'unknown account'} (accountId:${o.AccountId})`);
